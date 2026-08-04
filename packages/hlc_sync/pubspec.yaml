@@ -1,0 +1,19 @@
+name: hlc_sync
+description: >-
+  Field-level, last-writer-wins sync over any passive blob store, ordered by
+  hybrid logical clocks. No server, no live peers, no code generation.
+version: 0.1.0
+repository: https://github.com/kai-tw/dart-packages/tree/main/packages/hlc_sync
+issue_tracker: https://github.com/kai-tw/dart-packages/issues
+
+environment:
+  sdk: ^3.8.0
+
+resolution: workspace
+
+dependencies:
+  clock: ^1.1.2
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.2

@@ -1,0 +1,11 @@
+.dart_tool/
+.packages
+build/
+doc/api/
+
+# Libraries do not pin transitive versions for their consumers, so the lock
+# file is noise here. The workspace root would otherwise commit one lockfile
+# covering every member.
+pubspec.lock
+
+.DS_Store

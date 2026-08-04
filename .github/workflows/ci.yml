@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          # Pinned rather than `stable`: an upstream release should not be able
+          # to break a build nobody touched.
+          sdk: '3.12.0'
+
+      # One resolution for the whole workspace, from the root.
+      - run: dart pub get
+
+      - run: dart format --output=none --set-exit-if-changed .
+
+      - run: dart analyze --fatal-infos
+
+      - run: dart test
+        working-directory: packages/hlc_sync
+
+      # Catches pub.dev's own complaints (missing example, bad description
+      # length, unresolvable doc links) before a release rather than during one.
+      - run: dart pub publish --dry-run
+        working-directory: packages/hlc_sync

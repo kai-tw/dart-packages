@@ -1,0 +1,11 @@
+# Workspace root. Not a package — it exists so `dart pub get` resolves every
+# member against one shared lockfile, which is the whole point of keeping these
+# in one repo: two packages can never disagree about a dependency version.
+name: _
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+
+workspace:
+  - packages/hlc_sync
