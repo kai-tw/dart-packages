@@ -21,8 +21,35 @@ class SimpleWidget extends StatelessWidget {
 
 - **AppVersion**: automatically reads the app version and displays it with the
   OS icon (x.x.x).
-- **DateTimePickerField**: a form field that picks a date and time when tapped.
-- **DatePickerField**: a form field that picks a date when tapped.
+- **DateTimePickerField** / **DatePickerField**: a form field that picks a
+  date(+time) when tapped.
+- **CommonBadge**: overlays a badge (hidden/minimal/normal) on a child.
+- **CommonNavTile**: a clickable nav row — `.none`/`.internal`/`.external`
+  named constructors pick the trailing icon (chevron / external-link / none).
+- **CommonInfoWidget**: centred icon+title(+caption+actions) placeholder for
+  empty/offline/neutral states, with a `dense` inline variant.
+- **CommonErrorWidget** (+ `CommonErrorSliverWidget`, `CommonErrorDialog`):
+  error-tinted variants of the above.
+- **CommonLoadingWidget** (+ `CommonLoadingSliverWidget`,
+  `CommonLoadingDialog`): spinner (or determinate progress) + label.
+- **CommonSuccessDialog**: a success-confirmation dialog.
+- **CommonProgressDialog**: switches between the three dialogs above by
+  `CommonProgressStatus` (loading/success/error).
+- **CommonDeleteDialog**: confirm-then-delete dialog that manages its own
+  async lifecycle around `onDelete` — spinner while it runs, stays open with
+  an inline error on failure.
+
+### Text ownership
+
+This package ships **no built-in copy**. Every widget whose UI always shows
+some text (a title, a button label) takes that text as a **required**
+parameter — there is no English/Chinese/whatever default baked in, and
+nothing here depends on any app's localization setup. This is a deliberate
+constraint from merging widgets out of two apps with different languages and
+different (or no) l10n toolchains: a shared package can't own copy without
+picking one of them. Purely *behavioral* defaults (e.g. a dialog's dismiss
+button defaulting to `Navigator.pop`) are unaffected — only user-visible text
+is caller-supplied.
 
 ## Status
 

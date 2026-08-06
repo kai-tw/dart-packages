@@ -1,3 +1,13 @@
+## 1.1.0
+- Added `CommonBadge`, `CommonNavTile` (`.none`/`.internal`/`.external`),
+  `CommonInfoWidget`/`CommonErrorWidget`(+Sliver+Dialog)/`CommonLoadingWidget`
+  (+Sliver+Dialog)/`CommonSuccessDialog`/`CommonProgressDialog`, and
+  `CommonDeleteDialog` — merged from equivalent widgets independently built
+  in CherishCRM-Flutter and NovelGlide-Flutter (see each class's doc comment
+  for which app's shape won and why). New dependency:
+  `loading_animation_widget`. No widget in this package ships built-in copy —
+  see README §Text ownership.
+
 ## 1.0.6
 - Moved into `dart-packages` as a workspace member. No longer published to
   pub.dev — consumed as a git dependency. No functional change.

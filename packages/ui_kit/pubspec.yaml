@@ -1,6 +1,6 @@
 name: ui_kit
 description: This is a UI kit that shares Flutter components through my projects.
-version: 1.0.6
+version: 1.1.0
 repository: https://github.com/kai-tw/dart-packages/tree/main/packages/ui_kit
 
 environment:
@@ -12,6 +12,7 @@ dependencies:
   flutter:
     sdk: flutter
   intl: ^0.20.2
+  loading_animation_widget: ^1.2.0+4
   package_info_plus: ^9.0.0
 
 dev_dependencies:
