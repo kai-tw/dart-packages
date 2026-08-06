@@ -3,6 +3,9 @@
 build/
 doc/api/
 
+# Written by `flutter pub get` for Flutter-SDK members (kai_tw_ui_kit).
+.flutter-plugins-dependencies
+
 # Libraries do not pin transitive versions for their consumers, so the lock
 # file is noise here. The workspace root would otherwise commit one lockfile
 # covering every member.

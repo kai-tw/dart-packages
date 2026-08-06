@@ -11,14 +11,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dart-lang/setup-dart@v1
+      # Flutter SDK, not bare Dart: kai_tw_ui_kit depends on `flutter: sdk:
+      # flutter`, which plain dart-lang/setup-dart can't resolve. Its bundled
+      # Dart (3.12.0) matches the version this used to pin directly, so
+      # hlc_sync's resolution and tests are unaffected.
+      - uses: subosito/flutter-action@v2
         with:
-          # Pinned rather than `stable`: an upstream release should not be able
-          # to break a build nobody touched.
-          sdk: '3.12.0'
+          channel: 'stable'
+          flutter-version: '3.44.0'
+          cache: true
 
       # One resolution for the whole workspace, from the root.
-      - run: dart pub get
+      - run: flutter pub get
 
       - run: dart format --output=none --set-exit-if-changed .
 
@@ -31,3 +35,6 @@ jobs:
       # length, unresolvable doc links) before a release rather than during one.
       - run: dart pub publish --dry-run
         working-directory: packages/hlc_sync
+
+      # kai_tw_ui_kit is intentionally not published (git dependency only —
+      # see its README §Status), so no publish dry-run step for it.
