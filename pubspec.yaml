@@ -9,4 +9,4 @@ environment:
 
 workspace:
   - packages/hlc_sync
-  - packages/kai_tw_ui_kit
+  - packages/ui_kit

@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Flutter SDK, not bare Dart: kai_tw_ui_kit depends on `flutter: sdk:
+      # Flutter SDK, not bare Dart: ui_kit depends on `flutter: sdk:
       # flutter`, which plain dart-lang/setup-dart can't resolve. Its bundled
       # Dart (3.12.0) matches the version this used to pin directly, so
       # hlc_sync's resolution and tests are unaffected.
@@ -36,5 +36,5 @@ jobs:
       - run: dart pub publish --dry-run
         working-directory: packages/hlc_sync
 
-      # kai_tw_ui_kit is intentionally not published (git dependency only —
-      # see its README §Status), so no publish dry-run step for it.
+      # ui_kit is intentionally not published (git dependency only — see its
+      # README §Status), so no publish dry-run step for it.

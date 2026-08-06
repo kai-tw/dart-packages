@@ -7,13 +7,13 @@ never disagree about a dependency version.
 | Package | |
 |---|---|
 | [`hlc_sync`](packages/hlc_sync) | Field-level, last-writer-wins sync over any passive blob store, ordered by hybrid logical clocks. |
-| [`kai_tw_ui_kit`](packages/kai_tw_ui_kit) | A UI kit that shares Flutter components through my projects. |
+| [`ui_kit`](packages/ui_kit) | A UI kit that shares Flutter components through my projects. |
 
 ## Working on it
 
 ```bash
 flutter pub get   # resolves every member together, from the root
-                   # (the Flutter SDK is required now that kai_tw_ui_kit is a member)
+                   # (the Flutter SDK is required now that ui_kit is a member)
 dart analyze
 dart test
 ```

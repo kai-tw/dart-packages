@@ -1,4 +1,4 @@
-# kai_tw_ui_kit
+# ui_kit
 
 This is a UI kit that shares Flutter components through my projects.
 
