@@ -1,3 +1,13 @@
+## 1.2.0
+- `CommonNavTile` (all three named constructors) gains an optional `subtitle`
+  param, rendered as the tile's `ListTile.subtitle`.
+- `CommonDeleteDialog` (and its `.show` helper) gains optional `confirmPhrase`
+  + `confirmFieldHint` params — when set, the delete button stays disabled
+  behind a text field that must match `confirmPhrase` exactly, for actions
+  that need more friction than a second tap. `confirmFieldHint` is required
+  whenever `confirmPhrase` is set (same text-ownership rule as everywhere
+  else in this package).
+
 ## 1.1.0
 - Added `CommonBadge`, `CommonNavTile` (`.none`/`.internal`/`.external`),
   `CommonInfoWidget`/`CommonErrorWidget`(+Sliver+Dialog)/`CommonLoadingWidget`

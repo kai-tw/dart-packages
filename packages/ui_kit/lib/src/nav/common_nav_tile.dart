@@ -14,6 +14,7 @@ class CommonNavTile extends StatelessWidget {
     EdgeInsetsGeometry? padding,
     required Widget leading,
     required String title,
+    String? subtitle,
     required VoidCallback onTap,
     CommonBadgeType iconBadgeType = CommonBadgeType.hidden,
   }) : this._(
@@ -21,6 +22,7 @@ class CommonNavTile extends StatelessWidget {
          padding: padding,
          leading: leading,
          title: title,
+         subtitle: subtitle,
          onTap: onTap,
          iconBadgeType: iconBadgeType,
          trailing: _CommonNavTileTrailing.none,
@@ -32,6 +34,7 @@ class CommonNavTile extends StatelessWidget {
     EdgeInsetsGeometry? padding,
     required Widget leading,
     required String title,
+    String? subtitle,
     required VoidCallback onTap,
     CommonBadgeType iconBadgeType = CommonBadgeType.hidden,
   }) : this._(
@@ -39,6 +42,7 @@ class CommonNavTile extends StatelessWidget {
          padding: padding,
          leading: leading,
          title: title,
+         subtitle: subtitle,
          onTap: onTap,
          iconBadgeType: iconBadgeType,
          trailing: _CommonNavTileTrailing.internal,
@@ -54,6 +58,7 @@ class CommonNavTile extends StatelessWidget {
     EdgeInsetsGeometry? padding,
     required Widget leading,
     required String title,
+    String? subtitle,
     required VoidCallback onTap,
     CommonBadgeType iconBadgeType = CommonBadgeType.hidden,
     String? externalSemanticLabel,
@@ -62,6 +67,7 @@ class CommonNavTile extends StatelessWidget {
          padding: padding,
          leading: leading,
          title: title,
+         subtitle: subtitle,
          onTap: onTap,
          iconBadgeType: iconBadgeType,
          trailing: _CommonNavTileTrailing.external,
@@ -73,6 +79,7 @@ class CommonNavTile extends StatelessWidget {
     required this.padding,
     required this.leading,
     required this.title,
+    required this.subtitle,
     required this.onTap,
     required this.iconBadgeType,
     required _CommonNavTileTrailing trailing,
@@ -84,6 +91,7 @@ class CommonNavTile extends StatelessWidget {
   final Widget leading;
   final CommonBadgeType iconBadgeType;
   final String title;
+  final String? subtitle;
   final VoidCallback onTap;
   final _CommonNavTileTrailing _trailing;
   final String? _externalSemanticLabel;
@@ -111,6 +119,7 @@ class CommonNavTile extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.0)),
       leading: CommonBadge(type: iconBadgeType, child: leading),
       title: Text(title),
+      subtitle: subtitle != null ? Text(subtitle!) : null,
       trailing: trailing,
     );
   }

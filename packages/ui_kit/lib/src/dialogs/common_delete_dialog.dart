@@ -9,6 +9,12 @@ import 'package:flutter/material.dart';
 /// see the package README §Text ownership. [onError] is an optional hook
 /// for logging/telemetry only; [errorMessageBuilder] controls what the user
 /// sees (defaults to `error.toString()`).
+///
+/// [confirmPhrase], if set, gates the delete button behind a text field that
+/// must match it exactly — for actions destructive enough that a second tap
+/// isn't enough friction. [confirmFieldHint] is then required too (the same
+/// text-ownership rule extends to it — the package cannot phrase "type X to
+/// confirm" itself without picking a language).
 class CommonDeleteDialog extends StatefulWidget {
   const CommonDeleteDialog({
     super.key,
@@ -20,7 +26,12 @@ class CommonDeleteDialog extends StatefulWidget {
     required this.onDelete,
     this.errorMessageBuilder,
     this.onError,
-  });
+    this.confirmPhrase,
+    this.confirmFieldHint,
+  }) : assert(
+         confirmPhrase == null || confirmFieldHint != null,
+         'confirmFieldHint is required when confirmPhrase is set',
+       );
 
   final String title;
   final String content;
@@ -30,6 +41,8 @@ class CommonDeleteDialog extends StatefulWidget {
   final Future<void> Function() onDelete;
   final String Function(Object error)? errorMessageBuilder;
   final void Function(Object error, StackTrace stackTrace)? onError;
+  final String? confirmPhrase;
+  final String? confirmFieldHint;
 
   @override
   State<CommonDeleteDialog> createState() => _CommonDeleteDialogState();
@@ -44,6 +57,8 @@ class CommonDeleteDialog extends StatefulWidget {
     required Future<void> Function() onDelete,
     String Function(Object error)? errorMessageBuilder,
     void Function(Object error, StackTrace stackTrace)? onError,
+    String? confirmPhrase,
+    String? confirmFieldHint,
   }) {
     return showDialog<void>(
       context: context,
@@ -57,6 +72,8 @@ class CommonDeleteDialog extends StatefulWidget {
         onDelete: onDelete,
         errorMessageBuilder: errorMessageBuilder,
         onError: onError,
+        confirmPhrase: confirmPhrase,
+        confirmFieldHint: confirmFieldHint,
       ),
     );
   }
@@ -65,6 +82,28 @@ class CommonDeleteDialog extends StatefulWidget {
 class _CommonDeleteDialogState extends State<CommonDeleteDialog> {
   bool _isLoading = false;
   String? _errorMessage;
+  final TextEditingController _confirmController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _confirmController.addListener(_onConfirmTextChanged);
+  }
+
+  @override
+  void dispose() {
+    _confirmController.removeListener(_onConfirmTextChanged);
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  void _onConfirmTextChanged() {
+    setState(() {});
+  }
+
+  bool get _confirmSatisfied =>
+      widget.confirmPhrase == null ||
+      _confirmController.text == widget.confirmPhrase;
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +116,18 @@ class _CommonDeleteDialogState extends State<CommonDeleteDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(widget.content),
+            if (widget.confirmPhrase != null) ...<Widget>[
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: TextField(
+                  controller: _confirmController,
+                  enabled: !_isLoading,
+                  decoration: InputDecoration(
+                    hintText: widget.confirmFieldHint,
+                  ),
+                ),
+              ),
+            ],
             if (_errorMessage != null) ...<Widget>[
               const SizedBox(height: 12.0),
               Text(
@@ -93,7 +144,7 @@ class _CommonDeleteDialogState extends State<CommonDeleteDialog> {
             label: Text(widget.cancelLabel),
           ),
           FilledButton.icon(
-            onPressed: _isLoading ? null : _onDelete,
+            onPressed: _isLoading || !_confirmSatisfied ? null : _onDelete,
             icon: _isLoading
                 ? const SizedBox(
                     width: 16.0,
