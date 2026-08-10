@@ -10,17 +10,22 @@ import '../log_data_source.dart';
 /// not a cloud egress, so CWE-532 does not apply; stripping the error here
 /// would cost debuggability and buy nothing.
 ///
-/// ⚠️ Device-local is not the same as invisible. `debug` is skipped entirely in
-/// release, but the remaining levels do print in a release build, and on a
-/// device that means logcat / oslog — reachable through `adb logcat`, a bug
-/// report or a sysdiagnose. Pass [suppressInRelease] to drop everything below
-/// `error` in release when the app's log lines carry values it would rather
-/// not put there.
+/// **Nothing here reaches a release build.** `logger`'s default
+/// `DevelopmentFilter` wraps its whole decision in `assert(() { … }())` — "In
+/// release mode ALL logs are omitted", in its own words — so every level is
+/// dropped with asserts off, not just `debug`.
+///
+/// That is worth stating rather than assuming, because the sibling hazard is
+/// real and looks identical: `FlutterError.presentError` in release goes to
+/// `debugPrintStack(label: exception.toString())` → `print`, and `debugPrint`
+/// is **not** assert-gated. So an app that routes uncaught errors through
+/// `presentError` unconditionally does put raw exceptions on logcat / oslog —
+/// via that path, never via this one.
+///
+/// A `suppressInRelease` flag lived here briefly. It was dead: it gated levels
+/// the filter had already dropped.
 class LoggerAdapter extends LogDataSource {
-  LoggerAdapter({this.suppressInRelease = false});
-
-  /// Whether `info` / `warning` are dropped in release builds too.
-  final bool suppressInRelease;
+  LoggerAdapter();
 
   final Logger _logger = Logger(
     printer: PrettyPrinter(
@@ -37,16 +42,14 @@ class LoggerAdapter extends LogDataSource {
     ),
   );
 
-  bool get _quiet => kReleaseMode && suppressInRelease;
-
   @override
   Future<void> debug(
     String message, {
     Object? error,
     StackTrace? stackTrace,
   }) async {
-    // Local development diagnostics — never emitted in release, whatever
-    // [suppressInRelease] says.
+    // Local development diagnostics. The filter drops this in release too,
+    // but skipping the call means not building the message at all.
     if (kReleaseMode) {
       return;
     }
@@ -55,9 +58,6 @@ class LoggerAdapter extends LogDataSource {
 
   @override
   Future<void> info(String message) async {
-    if (_quiet) {
-      return;
-    }
     return _infoLogger.i(message);
   }
 
@@ -67,9 +67,6 @@ class LoggerAdapter extends LogDataSource {
     Object? error,
     StackTrace? stackTrace,
   }) async {
-    if (_quiet) {
-      return;
-    }
     return _logger.w(message, error: error, stackTrace: stackTrace);
   }
 
@@ -93,9 +90,6 @@ class LoggerAdapter extends LogDataSource {
 
   @override
   Future<void> event(String name, {Map<String, Object>? parameters}) async {
-    if (_quiet) {
-      return;
-    }
     return _logger.i('Event: $name\n$parameters');
   }
 }

@@ -62,11 +62,6 @@ class LogSystem {
   /// anything user-derived wants this off, which leaves `info` device-local
   /// exactly like `debug`.
   ///
-  /// [suppressConsoleInRelease] — whether the console drops everything below
-  /// `error` in a release build. "Device-local" is not "invisible": in release
-  /// the console reaches logcat / oslog, readable through `adb logcat`, a bug
-  /// report or a sysdiagnose.
-  ///
   /// [reportCrashes] — off keeps every level device-local **and switches
   /// Crashlytics collection off at the SDK**, which is what an integration
   /// harness wants: gating what this package sends does nothing about the
@@ -98,7 +93,6 @@ class LogSystem {
   /// real crash reporter.
   static void init({
     bool forwardInfo = false,
-    bool suppressConsoleInRelease = false,
     bool reportCrashes = true,
     Map<String, String> customKeys = const <String, String>{},
     Future<Map<String, String>> Function()? deferredCustomKeys,
@@ -112,7 +106,7 @@ class LogSystem {
     // that most wanted silence would be the one still reporting.
     _instance = LogSystem(
       LogRepositoryImpl(
-        console: LoggerAdapter(suppressInRelease: suppressConsoleInRelease),
+        console: LoggerAdapter(),
         report: FirebaseCrashlyticsAdapter(
           FirebaseCrashlytics.instance,
           enabled: reportCrashes && kReleaseMode,
