@@ -1,3 +1,4 @@
+import '../errors.dart';
 import '../hlc/hlc.dart';
 
 /// Shared value conversions for the sync wire format.
@@ -35,9 +36,11 @@ Hlc? decodeHlcOrNull(String? raw) {
   }
   try {
     return Hlc.decode(raw);
-  } catch (_) {
+  } on HlcDecodeException {
     // Absent loses every comparison, which is the safe direction: a garbage
-    // stamp accepted as real could mark a genuine edit as unchanged.
+    // stamp accepted as real could mark a genuine edit as unchanged. Narrowed
+    // from a bare catch: that also hid programming errors behind the same
+    // "safe" answer.
     return null;
   }
 }

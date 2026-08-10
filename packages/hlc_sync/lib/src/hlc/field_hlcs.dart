@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../errors.dart';
 import 'hlc.dart';
 
 /// Encodes and decodes the per-field HLC stamp map.
@@ -32,13 +33,18 @@ abstract final class FieldHlcs {
         if (value is String) {
           try {
             result[entry.key] = Hlc.decode(value);
-          } catch (_) {
-            // Skip this field; the rest of the record is still usable.
+          } on HlcDecodeException {
+            // Skip this field; the rest of the record is still usable. Narrow
+            // on purpose: a bare catch here also swallows programming errors,
+            // so a bug in Hlc.decode would read as "this record has no stamps"
+            // and lose every merge, silently.
           }
         }
       }
       return result;
-    } catch (_) {
+    } on FormatException {
+      // Only a parse failure. Anything else is a bug and must reach the
+      // caller's error handler rather than be reported as an unstamped record.
       return <String, Hlc>{};
     }
   }
