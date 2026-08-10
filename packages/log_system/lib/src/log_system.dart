@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import 'fan_out_log_repository.dart';
 import 'firebase_crashlytics_adapter.dart';
+import 'log_error_redactor.dart';
 import 'log_repository.dart';
 import 'logger_adapter.dart';
 
@@ -46,6 +47,26 @@ class LogSystem {
   /// that needs a platform round-trip; it lands a moment after launch, so a
   /// crash in the first frames may miss it.
   ///
+  /// [describeExtra] keeps one structural field from an error type this
+  /// package cannot name. It is reduced to a type name by default, and the
+  /// built-in arms cover `dart:io` and `package:flutter` only — an arm for an
+  /// HTTP client's exception would make that client a dependency of every
+  /// consumer. The host app already has it, so the host app describes it:
+  ///
+  /// ```dart
+  /// describeExtra: (Object e) => switch (e) {
+  ///   DioException() => 'status=${e.response?.statusCode ?? '-'}',
+  ///   _ => null,
+  /// },
+  /// ```
+  ///
+  /// Return the **field only** — the type name is prepended for you, so a
+  /// describer cannot break crash-report grouping. Returning null falls
+  /// through to the built-in arms. It must not throw, and it must not call
+  /// `toString()` on the error; it is handed an untrusted object, and its
+  /// output is still gated for path- and sentence-shaped values before
+  /// anything crosses.
+  ///
   /// **Calling this again replaces the wiring** rather than throwing, which is
   /// a deliberate departure from what `init` usually implies: an integration
   /// harness swaps in a reporter-less setup to keep a test build off the real
@@ -56,7 +77,9 @@ class LogSystem {
     bool reportCrashes = true,
     Map<String, String> customKeys = const <String, String>{},
     Future<Map<String, String>> Function()? deferredCustomKeys,
+    String? Function(Object error)? describeExtra,
   }) {
+    LogErrorRedactor.describeExtra = describeExtra;
     _repository = FanOutLogRepository(
       console: LoggerAdapter(suppressInRelease: suppressConsoleInRelease),
       report: reportCrashes

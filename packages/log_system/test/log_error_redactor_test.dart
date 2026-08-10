@@ -16,6 +16,63 @@ class _Domain implements Exception {
 }
 
 void main() {
+  tearDown(() => LogErrorRedactor.describeExtra = null);
+
+  group('a host describer keeps a field this package cannot name', () {
+    test('the field is appended and the type name is still prepended', () {
+      LogErrorRedactor.describeExtra = (Object error) =>
+          error is _Domain ? 'status=404' : null;
+      expect(
+        LogErrorRedactor.redact(const _Domain()).toString(),
+        '_Domain status=404',
+      );
+    });
+
+    test('two fields are allowed', () {
+      LogErrorRedactor.describeExtra = (Object error) =>
+          'status=404 connectionTimeout';
+      expect(
+        LogErrorRedactor.redact(const _Domain()).toString(),
+        '_Domain status=404 connectionTimeout',
+      );
+    });
+
+    test('returning null falls through to the built-in arms', () {
+      LogErrorRedactor.describeExtra = (Object error) => null;
+      expect(
+        LogErrorRedactor.redact(const OSError('EACCES', 13)).toString(),
+        'OSError errno=13',
+      );
+    });
+
+    test('a describer runs before the built-in arms, so it can override', () {
+      LogErrorRedactor.describeExtra = (Object error) => 'overridden';
+      expect(
+        LogErrorRedactor.redact(const OSError('EACCES', 13)).toString(),
+        'OSError overridden',
+      );
+    });
+
+    test('a describer that returns a path is still gated', () {
+      // The whole point is that nothing outside can widen the egress. A
+      // describer written wrong is a mistake this boundary absorbs.
+      LogErrorRedactor.describeExtra = (Object error) =>
+          'path=/Users/someone/books/王小明.epub';
+      expect(LogErrorRedactor.redact(const _Domain()).toString(), '_Domain');
+    });
+
+    test('a describer that returns a sentence is still gated', () {
+      LogErrorRedactor.describeExtra = (Object error) =>
+          'could not open the file';
+      expect(LogErrorRedactor.redact(const _Domain()).toString(), '_Domain');
+    });
+
+    test('a describer that returns an over-long value is still gated', () {
+      LogErrorRedactor.describeExtra = (Object error) => 'a' * 49;
+      expect(LogErrorRedactor.redact(const _Domain()).toString(), '_Domain');
+    });
+  });
+
   group('default-deny', () {
     test('an unrecognised type is reduced to its type name', () {
       final String redacted = LogErrorRedactor.redact(
