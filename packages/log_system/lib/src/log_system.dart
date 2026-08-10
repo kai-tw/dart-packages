@@ -57,12 +57,6 @@ class LogSystem {
   /// Builds the graph and wires it. Call once, during startup, before
   /// anything logs.
   ///
-  /// [forwardInfo] — whether an `info` line becomes a crash-reporter
-  /// breadcrumb. A breadcrumb only ever surfaces alongside a later crash, so
-  /// it is cheap, but it is still an egress: an app whose `info` lines quote
-  /// anything user-derived wants this off, which leaves `info` device-local
-  /// exactly like `debug`.
-  ///
   /// [reportCrashes] — off keeps every level device-local **and switches
   /// Crashlytics collection off at the SDK**. Gating what this package sends
   /// does nothing about the native crash capture, which runs with no Dart code
@@ -70,13 +64,12 @@ class LogSystem {
   ///
   /// Collection is therefore set on every [init], to whatever `reportCrashes &&
   /// kReleaseMode` comes to, and is never left at the SDK's default — which is
-  /// on. **That means [init] requires `Firebase.initializeApp()` to have run**,
-  /// and it throws if it has not.
+  /// on.
   ///
-  /// ⚠️ `reportCrashes: false` is **not** the "no Firebase" case — that
-  /// one is detected, see below. This means Firebase *is* there and must be
-  /// told to stay quiet: a beta build, a harness that stands Firebase up.
-  /// Conflating the two is how this parameter first shipped, and it made the
+  /// ⚠️ `reportCrashes: false` is **not** the "no Firebase" case — that one is
+  /// detected, see below. This means Firebase *is* there and must be told to
+  /// stay quiet: a beta build, a harness that stands Firebase up. Conflating
+  /// the two is how this parameter first shipped, and it made the
   /// configuration that most needed to avoid Firebase the one that crashed on
   /// startup.
   ///
@@ -124,7 +117,6 @@ class LogSystem {
   /// release, appears where a developer is already looking in debug, and
   /// leaves everything working either way.
   static void init({
-    bool forwardInfo = false,
     bool reportCrashes = true,
     bool installErrorHandlers = true,
     Map<String, String> customKeys = const <String, String>{},
@@ -149,7 +141,6 @@ class LogSystem {
             ? FirebaseCrashlyticsAdapter(
                 FirebaseCrashlytics.instance,
                 enabled: reportCrashes && kReleaseMode,
-                forwardInfo: forwardInfo,
                 customKeys: customKeys,
                 deferredCustomKeys: deferredCustomKeys,
               )

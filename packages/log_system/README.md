@@ -38,7 +38,6 @@ throwing on the second call would take that away.
 
 | flag | default | what it decides |
 |---|---|---|
-| `forwardInfo` | `false` | whether an `info` line becomes a crash-reporter breadcrumb. Cheap — a breadcrumb only surfaces alongside a later crash — but still an egress. Off leaves `info` device-local, like `debug`. |
 | `reportCrashes` | `true` | off wires no crash reporter at all. Every level then stays device-local. |
 | `customKeys` | `{}` | stamped on the crash reporter as-is. **Bypasses redaction**, so only provably non-identifying values belong here — a commit sha, a release channel. |
 | `deferredCustomKeys` | `null` | for a key needing a platform round-trip. Lands a moment after launch, so a crash in the first frames may miss it. |
@@ -81,9 +80,17 @@ this one. See the framework-fatal section below.
 | level | console | crash reporter |
 |---|---|---|
 | `debug` | yes, and never in release | never |
-| `info` | yes | breadcrumb, if `forwardInfo` |
+| `info` | yes | breadcrumb |
 | `warning` | yes | breadcrumb — never a fault entry |
 | `error` / `fatal` | yes | `recordError`, non-fatal / fatal |
+
+A breadcrumb is not a fault entry — it surfaces only alongside a later crash.
+`info` and `warning` both produce one, and there is no flag to turn that off.
+There was: `forwardInfo` gated `info` and not `warning`, which carries the
+identical hazard, so switching it off looked like protection and was half of
+one. **The message crosses verbatim at every level that reaches the reporter**,
+and that is an authoring-time discipline — a lint that forbids interpolating
+non-primitives into a log message — not something a runtime flag can fix.
 
 `info` takes no error object on purpose: it describes an expected condition. An
 exception worth keeping makes it a `warning` or an `error`.

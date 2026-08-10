@@ -21,7 +21,6 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
   FirebaseCrashlyticsAdapter(
     this._instance, {
     bool? enabled,
-    this.forwardInfo = true,
     Map<String, String> customKeys = const <String, String>{},
     Future<Map<String, String>> Function()? deferredCustomKeys,
   }) : enabled = enabled ?? kReleaseMode {
@@ -57,14 +56,6 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
   /// Whether anything leaves the device at all.
   final bool enabled;
 
-  /// Whether `info` becomes a breadcrumb.
-  ///
-  /// A breadcrumb is only ever surfaced alongside a later crash, so it is
-  /// cheap — but it is still an egress, and an app whose `info` lines quote
-  /// anything user-derived wants this off. Off means `info` is device-local,
-  /// exactly like `debug`.
-  final bool forwardInfo;
-
   Future<void> _stampDeferred(
     Future<Map<String, String>> Function() resolve,
   ) async {
@@ -87,9 +78,17 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
 
   @override
   Future<void> info(String message) async {
-    if (!enabled || !forwardInfo) {
+    if (!enabled) {
       return;
     }
+    // A breadcrumb, not a fault entry — surfaced only alongside a later crash.
+    //
+    // [message] crosses verbatim, here and at every other level that reaches
+    // this sink. That is an authoring-time discipline, not something a runtime
+    // flag can fix: a `forwardInfo` flag lived here and was removed for
+    // pretending otherwise. It gated this level and not `warning`, which
+    // carries the identical hazard, so turning it off looked like protection
+    // and was half of one.
     return _instance.log('Info: $message');
   }
 
