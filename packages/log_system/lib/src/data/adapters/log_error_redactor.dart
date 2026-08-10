@@ -48,10 +48,14 @@ class LogErrorRedactor {
   /// is written. Returning null falls through to the built-in arms.
   static String? Function(Object error)? describeExtra;
 
-  static Object? redact(Object? error) {
-    // Null short-circuit: a no-error log forwards nothing.
+  static Object redact(Object? error) {
+    // A no-error log says so, rather than arriving as `null`. Returning null
+    // does not keep it out of the report — the plugin ends at
+    // `exception.toString()` on a `dynamic`, so the issue would be titled
+    // `"null"`, and every message-only call site in the app would group under
+    // it.
     if (error == null) {
-      return null;
+      return const _RedactedError('<no error object>');
     }
 
     final String type = error.runtimeType.toString();
@@ -155,11 +159,7 @@ class LogErrorRedactor {
   /// instance. Only the redacted exception, the stack and the library survive.
   static FlutterErrorDetails redactDetails(FlutterErrorDetails details) {
     return FlutterErrorDetails(
-      // `redact` returns null only for a null input and `details.exception` is
-      // non-null, so the fallback is unreachable. It exists to satisfy the
-      // non-null field, and is itself a surrogate so even an unforeseen null
-      // cannot leak the raw object.
-      exception: redact(details.exception) ?? const _RedactedError('redacted'),
+      exception: redact(details.exception),
       stack: details.stack,
       library: details.library,
     );

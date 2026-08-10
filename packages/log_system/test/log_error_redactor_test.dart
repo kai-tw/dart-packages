@@ -109,8 +109,15 @@ void main() {
       );
     });
 
-    test('null forwards nothing', () {
-      expect(LogErrorRedactor.redact(null), isNull);
+    test('no error object says so, rather than arriving as "null"', () {
+      // `LogSystem.error('…')` with a message only is how this happens.
+      // Leaving it null does not keep it out of the report: the plugin's last
+      // line is `exception.toString()` on a `dynamic`, so the issue would be
+      // titled `null` and every message-only call site would group under it.
+      expect(
+        LogErrorRedactor.redact(null).toString(),
+        '<no error object>',
+      );
     });
 
     test('the surrogate leads with the type name, so grouping survives', () {
