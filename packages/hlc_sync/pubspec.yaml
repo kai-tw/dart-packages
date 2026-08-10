@@ -16,4 +16,11 @@ dependencies:
 
 dev_dependencies:
   lints: ^6.1.0
-  test: ^1.31.2
+  # Deliberately wider than `^1.31.2`. The workspace resolves every member
+  # against one lockfile, and a Flutter member's `flutter_test` pins `test_api`
+  # to whatever the installed SDK ships — 1.31.2 wants a newer `test_api` than
+  # that, so pinning the floor here makes the whole workspace unresolvable the
+  # moment a Flutter package with tests joins it. Runtime is unaffected; this
+  # package has no Flutter dependency and none of its 87 tests use an API
+  # newer than 1.25.
+  test: ">=1.25.0 <2.0.0"
