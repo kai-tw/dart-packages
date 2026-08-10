@@ -93,35 +93,50 @@ translate at its own boundary into a domain type whose **name** carries it:
 `CloudOfflineException` reads better in a crash report than
 `SocketException errno=61` anyway.
 
-## The framework-fatal path
+## The two uncaught-error handlers
 
-`FlutterError.onError` does not go through `LogSystem`, and this package does
-not install it — crash-zone setup belongs to app bootstrap. Route it through
-`LogSystem.fatal` so it lands in the same redacted path:
+This package does not install them — crash-zone setup belongs to app bootstrap.
+Route them through `LogSystem` so they land in the same redacted path:
 
 ```dart
-FlutterError.onError = (FlutterErrorDetails details) {
-  if (kDebugMode) {
-    FlutterError.presentError(details);
-  }
-  LogSystem.fatal(
-    'flutter: uncaught framework error',
-    error: details.exception,
-    stackTrace: details.stack,
-  );
-};
+// Only in release. In debug `FlutterError.onError` already defaults to
+// `presentError`, so overriding it there means reimplementing the default —
+// and calling `presentError` *and* logging prints the same error twice.
+if (kReleaseMode) {
+  FlutterError.onError = (FlutterErrorDetails details) {
+    if (details.silent) {
+      LogSystem.error('flutter: environmental framework error',
+          error: details.exception, stackTrace: details.stack);
+      return;
+    }
+    LogSystem.fatal('flutter: uncaught framework error',
+        error: details.exception, stackTrace: details.stack);
+  };
+}
 
 PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-  LogSystem.fatal('uncaught async error', error: error, stackTrace: stack);
+  LogSystem.error('uncaught async error', error: error, stackTrace: stack);
   return true;
 };
 ```
 
-`presentError` is gated on debug deliberately. In release `dumpErrorToConsole`
-takes the `debugPrintStack(label: exception.toString())` branch, and
-`debugPrint` is not assert-gated — calling it unconditionally prints the raw
-exception to logcat / oslog, which is the object the redactor exists to stop,
-reaching a different sink.
+**`details.silent` is what decides fatal**, and the framework sets it at the
+throw site: "errors that could be triggered by environmental conditions (as
+opposed to logic errors)" — the HTTP library sets it so a 404 on flaky wifi
+does not read like a bug. The framework already honours it; `dumpErrorToConsole`
+skips silent errors in release. FlutterFire's `recordFlutterError` never looks
+at it, which is how its documented pattern files every one of them as a crash
+and makes crash-free users describe nothing.
+
+**The async handler is not fatal at all.** There is no `silent` to consult, and
+it returns `true` — the app saying it has handled the error and will keep
+running. Filing that as a crash contradicts the line under it.
+
+**Never call `presentError` in release.** There `dumpErrorToConsole` takes the
+`debugPrintStack(label: exception.toString())` branch, and `debugPrint` is not
+assert-gated, so it prints the raw exception to logcat / oslog — the object the
+redaction exists to stop, reaching a different sink. Installing the handler
+release-only, as above, makes that structural rather than a rule to remember.
 
 Passing `details.exception` rather than `details` is also what drops `context`
 and `informationCollector`: both are `DiagnosticsNode`s that can carry
