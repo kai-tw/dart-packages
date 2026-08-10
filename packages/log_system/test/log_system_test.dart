@@ -125,6 +125,17 @@ void main() {
       expect(console.calls, isEmpty);
     });
 
+    test('initConsoleOnly touches no Firebase API', () {
+      // The integration-harness case: the real graph is booted against no
+      // backend, so `Firebase.initializeApp()` was never called and
+      // `FirebaseCrashlytics.instance` would throw synchronously. This test
+      // runs with no Firebase either — if the call reached it, this would
+      // fail rather than pass, which is the whole assertion.
+      LogSystem.reset();
+      expect(LogSystem.initConsoleOnly, returnsNormally);
+      expect(() => LogSystem.fatal('still logs'), returnsNormally);
+    });
+
     test('a repository with no reporter keeps every level device-local', () {
       LogSystem.initWithRepositoryForTest(LogRepositoryImpl(console: console));
       LogSystem.info('i');

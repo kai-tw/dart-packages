@@ -63,15 +63,21 @@ class LogSystem {
   /// exactly like `debug`.
   ///
   /// [reportCrashes] — off keeps every level device-local **and switches
-  /// Crashlytics collection off at the SDK**, which is what an integration
-  /// harness wants: gating what this package sends does nothing about the
-  /// native crash capture, which runs with no Dart code involved.
+  /// Crashlytics collection off at the SDK**. Gating what this package sends
+  /// does nothing about the native crash capture, which runs with no Dart code
+  /// involved, so the switch has to be thrown either way.
   ///
-  /// Collection is switched on every [init], to whatever `reportCrashes &&
-  /// kReleaseMode` comes to — so it is never left at the SDK's default, which
-  /// is on. That means [init] requires Firebase to have been initialised. An
-  /// app or test that has no Firebase should not call [init] at all; every
-  /// level is a no-op until it does.
+  /// Collection is therefore set on every [init], to whatever `reportCrashes &&
+  /// kReleaseMode` comes to, and is never left at the SDK's default — which is
+  /// on. **That means [init] requires `Firebase.initializeApp()` to have run**,
+  /// and it throws if it has not.
+  ///
+  /// ⚠️ `reportCrashes: false` is **not** the "no Firebase" case. It means
+  /// Firebase is there and must be told to stay quiet — a beta build, a
+  /// harness that stands Firebase up. For a build with no Firebase at all, use
+  /// [initConsoleOnly], which touches none of it. Conflating the two is how
+  /// this parameter first shipped, and it made the configuration that most
+  /// needed to avoid Firebase the one that crashed on startup.
   ///
   /// [customKeys] are stamped on the crash reporter as-is and **bypass
   /// redaction entirely**, so only provably non-identifying values belong
@@ -116,6 +122,28 @@ class LogSystem {
         ),
       ),
     );
+  }
+
+  /// Wires the console and nothing else. **Touches no Firebase API**, so it is
+  /// safe before — or entirely without — `Firebase.initializeApp()`.
+  ///
+  /// For a build that genuinely has no crash reporter: an integration harness
+  /// that boots the real dependency graph against no backend, or an app that
+  /// has not wired one yet. Every level stays on the device.
+  ///
+  /// Distinct from `init(reportCrashes: false)`, which means the opposite
+  /// thing about Firebase — that it *is* there, and is being told to stay
+  /// quiet. That distinction is the whole reason this exists separately: one
+  /// flag cannot both switch a collection setting off and avoid the object
+  /// that setting lives on.
+  ///
+  /// It is deliberately explicit rather than [init] detecting an absent
+  /// Firebase and degrading. An app that simply forgot `initializeApp()` would
+  /// then get no crash reporting and no complaint, which for an egress this
+  /// app is judged by is the wrong way to fail.
+  static void initConsoleOnly() {
+    LogErrorRedactor.describeExtra = null;
+    _instance = LogSystem(LogRepositoryImpl(console: LoggerAdapter()));
   }
 
   /// Wires a repository directly, for **this package's own tests**.

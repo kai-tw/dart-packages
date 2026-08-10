@@ -43,6 +43,27 @@ throwing on the second call would take that away.
 | `customKeys` | `{}` | stamped on the crash reporter as-is. **Bypasses redaction**, so only provably non-identifying values belong here — a commit sha, a release channel. |
 | `deferredCustomKeys` | `null` | for a key needing a platform round-trip. Lands a moment after launch, so a crash in the first frames may miss it. |
 
+### No Firebase at all
+
+`init` requires `Firebase.initializeApp()` to have run — it throws otherwise,
+because setting the collection flag means touching `FirebaseCrashlytics`.
+
+For a build that has no Firebase, use `initConsoleOnly()`. It wires the console
+and nothing else, and touches no Firebase API:
+
+```dart
+LogSystem.initConsoleOnly();   // integration harness, or no reporter yet
+```
+
+⚠️ `init(reportCrashes: false)` is **not** this case. It means Firebase *is*
+there and is being told to stay quiet. One flag cannot both switch a collection
+setting off and avoid the object that setting lives on, which is why these are
+two entry points rather than one.
+
+`init` does not detect an absent Firebase and quietly degrade, deliberately: an
+app that simply forgot `initializeApp()` would then get no crash reporting and
+no complaint.
+
 ### The console never reaches a release build
 
 `logger`'s default `DevelopmentFilter` wraps its whole decision in
