@@ -39,10 +39,22 @@ throwing on the second call would take that away.
 | flag | default | what it decides |
 |---|---|---|
 | `forwardInfo` | `false` | whether an `info` line becomes a crash-reporter breadcrumb. Cheap — a breadcrumb only surfaces alongside a later crash — but still an egress. Off leaves `info` device-local, like `debug`. |
-| `suppressConsoleInRelease` | `false` | whether the console drops everything below `error` in release. "Device-local" is not "invisible": in release the console reaches logcat / oslog. |
 | `reportCrashes` | `true` | off wires no crash reporter at all. Every level then stays device-local. |
 | `customKeys` | `{}` | stamped on the crash reporter as-is. **Bypasses redaction**, so only provably non-identifying values belong here — a commit sha, a release channel. |
 | `deferredCustomKeys` | `null` | for a key needing a platform round-trip. Lands a moment after launch, so a crash in the first frames may miss it. |
+
+### The console never reaches a release build
+
+`logger`'s default `DevelopmentFilter` wraps its whole decision in
+`assert(() { … }())` — "In release mode ALL logs are omitted", in its own words
+— so every level is dropped with asserts off, not just `debug`. There is no
+flag for this and there was never anything for one to do.
+
+Worth stating rather than assuming, because the sibling hazard looks identical
+and is real: `FlutterError.presentError` in release goes to
+`debugPrintStack(label: exception.toString())` → `print`, and `debugPrint` is
+**not** assert-gated. Raw exceptions do reach logcat / oslog — that way, never
+this one. See the framework-fatal section below.
 
 ## Severity routing
 
