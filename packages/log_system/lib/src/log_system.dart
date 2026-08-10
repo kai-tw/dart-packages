@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
@@ -72,12 +73,12 @@ class LogSystem {
   /// on. **That means [init] requires `Firebase.initializeApp()` to have run**,
   /// and it throws if it has not.
   ///
-  /// ⚠️ `reportCrashes: false` is **not** the "no Firebase" case. It means
-  /// Firebase is there and must be told to stay quiet — a beta build, a
-  /// harness that stands Firebase up. For a build with no Firebase at all, use
-  /// [initConsoleOnly], which touches none of it. Conflating the two is how
-  /// this parameter first shipped, and it made the configuration that most
-  /// needed to avoid Firebase the one that crashed on startup.
+  /// ⚠️ `reportCrashes: false` is **not** the "no Firebase" case — that
+  /// one is detected, see below. This means Firebase *is* there and must be
+  /// told to stay quiet: a beta build, a harness that stands Firebase up.
+  /// Conflating the two is how this parameter first shipped, and it made the
+  /// configuration that most needed to avoid Firebase the one that crashed on
+  /// startup.
   ///
   /// [customKeys] are stamped on the crash reporter as-is and **bypass
   /// redaction entirely**, so only provably non-identifying values belong
@@ -93,57 +94,134 @@ class LogSystem {
   /// crash-report grouping. An app's own exceptions should extend
   /// `LoggableException` instead of going through here.
   ///
+  /// [installErrorHandlers] assigns `FlutterError.onError` and
+  /// `PlatformDispatcher.instance.onError`. On by default, because leaving it
+  /// to each app is how two of them ended up disagreeing about which uncaught
+  /// errors count as crashes. Pass false only if the app installs its own —
+  /// and note that this **reassigns two global handlers**, which is a side
+  /// effect worth knowing [init] has.
+  ///
   /// **Calling this again replaces the wiring** rather than throwing, which is
   /// a deliberate departure from what `init` usually implies: an integration
-  /// harness re-inits with `reportCrashes: false` to keep a test build off the
-  /// real crash reporter.
+  /// harness re-inits to swap the real reporter out.
+  ///
+  /// ## When Firebase is absent
+  ///
+  /// [init] needs `Firebase.initializeApp()` to have run, because setting the
+  /// collection flag means touching `FirebaseCrashlytics`. When it has not —
+  /// an integration harness booting the real graph against no backend — this
+  /// wires the console alone and says so through the console.
+  ///
+  /// Neither of the obvious alternatives works. **Throwing** would let a
+  /// logging library stop an app from starting, a worse failure than the one
+  /// it guards against, and it would break the harness this case exists for.
+  /// **Asserting** is the same thing wearing a debug badge — it aborts the
+  /// rest of `init`, so the harness gets an exception *and* no logging at all.
+  /// **Degrading silently** would let an app that simply forgot
+  /// `initializeApp()` get no crash reporting and no complaint.
+  ///
+  /// A warning through the sink that is definitely wired costs nothing in
+  /// release, appears where a developer is already looking in debug, and
+  /// leaves everything working either way.
   static void init({
     bool forwardInfo = false,
     bool reportCrashes = true,
+    bool installErrorHandlers = true,
     Map<String, String> customKeys = const <String, String>{},
     Future<Map<String, String>> Function()? deferredCustomKeys,
     String? Function(Object error)? describeExtra,
   }) {
     LogErrorRedactor.describeExtra = describeExtra;
-    // The adapter is built even when it will send nothing, because building
-    // it is what switches collection **off** at the SDK. Skipping it on
-    // `reportCrashes: false` would leave the SDK's default — on — and the
-    // native layer captures a crash with no Dart code involved, so the build
-    // that most wanted silence would be the one still reporting.
+
+    // A registry read, not an app lookup, so it is safe before
+    // `initializeApp()` — it answers with an empty list rather than throwing.
+    final bool hasFirebase = Firebase.apps.isNotEmpty;
+
     _instance = LogSystem(
       LogRepositoryImpl(
         console: LoggerAdapter(),
-        report: FirebaseCrashlyticsAdapter(
-          FirebaseCrashlytics.instance,
-          enabled: reportCrashes && kReleaseMode,
-          forwardInfo: forwardInfo,
-          customKeys: customKeys,
-          deferredCustomKeys: deferredCustomKeys,
-        ),
+        // Built even when it will send nothing, because building it is what
+        // switches collection **off** at the SDK. Skipping it on
+        // `reportCrashes: false` would leave the SDK default — on — and the
+        // native layer captures a crash with no Dart code involved, so the
+        // build that most wanted silence would be the one still reporting.
+        report: hasFirebase
+            ? FirebaseCrashlyticsAdapter(
+                FirebaseCrashlytics.instance,
+                enabled: reportCrashes && kReleaseMode,
+                forwardInfo: forwardInfo,
+                customKeys: customKeys,
+                deferredCustomKeys: deferredCustomKeys,
+              )
+            : null,
       ),
     );
+
+    if (installErrorHandlers) {
+      _installErrorHandlers();
+    }
+
+    // After the wiring, deliberately — this is the one message that has to go
+    // out through the sink it is complaining about.
+    if (!hasFirebase) {
+      warning(
+        'log: no Firebase app, so nothing will be reported — console only',
+      );
+    }
   }
 
-  /// Wires the console and nothing else. **Touches no Firebase API**, so it is
-  /// safe before — or entirely without — `Firebase.initializeApp()`.
-  ///
-  /// For a build that genuinely has no crash reporter: an integration harness
-  /// that boots the real dependency graph against no backend, or an app that
-  /// has not wired one yet. Every level stays on the device.
-  ///
-  /// Distinct from `init(reportCrashes: false)`, which means the opposite
-  /// thing about Firebase — that it *is* there, and is being told to stay
-  /// quiet. That distinction is the whole reason this exists separately: one
-  /// flag cannot both switch a collection setting off and avoid the object
-  /// that setting lives on.
-  ///
-  /// It is deliberately explicit rather than [init] detecting an absent
-  /// Firebase and degrading. An app that simply forgot `initializeApp()` would
-  /// then get no crash reporting and no complaint, which for an egress this
-  /// app is judged by is the wrong way to fail.
-  static void initConsoleOnly() {
-    LogErrorRedactor.describeExtra = null;
-    _instance = LogSystem(LogRepositoryImpl(console: LoggerAdapter()));
+  /// The two handlers every uncaught throw arrives at, wired once here so two
+  /// apps cannot drift apart on the judgements they involve. They did.
+  static void _installErrorHandlers() {
+    // Release only. In debug `FlutterError.onError` already defaults to
+    // `FlutterError.presentError`, so overriding it there reimplements the
+    // default — and presenting *and* logging prints the same error twice while
+    // the reporter is disabled and there is nothing to report.
+    //
+    // It also keeps `presentError` out of release structurally. There
+    // `dumpErrorToConsole` takes the `debugPrintStack(label:
+    // exception.toString())` branch, and `debugPrint` is not assert-gated, so
+    // it would put the raw exception on logcat / oslog — the object the
+    // redaction exists to stop, reaching a different sink.
+    if (kReleaseMode) {
+      FlutterError.onError = (FlutterErrorDetails details) {
+        // `details.silent` is the framework's own fatal/non-fatal signal, set
+        // at the throw site: "errors that could be triggered by environmental
+        // conditions (as opposed to logic errors)". The HTTP library sets it
+        // so a 404 on flaky wifi does not read like a bug, and the framework
+        // honours it in `dumpErrorToConsole`. FlutterFire's
+        // `recordFlutterError` never looks at it, which is how its documented
+        // pattern files every one of them as a crash — and `fatal: true` feeds
+        // crash-free users, the number a release is judged by.
+        //
+        // `details.exception` rather than `details` is also what drops
+        // `context` and `informationCollector`, both `DiagnosticsNode`s that
+        // can carry widget-tree property values.
+        if (details.silent) {
+          error(
+            'flutter: environmental framework error',
+            error: details.exception,
+            stackTrace: details.stack,
+          );
+          return;
+        }
+        fatal(
+          'flutter: uncaught framework error',
+          error: details.exception,
+          stackTrace: details.stack,
+        );
+      };
+    }
+
+    // Unconditional, because Flutter installs nothing here by default.
+    //
+    // Not fatal, and there is no `silent` to consult on this path. `return
+    // true` says the app has handled the error and will keep running, so
+    // filing it as a crash would contradict the line above it.
+    PlatformDispatcher.instance.onError = (Object err, StackTrace stack) {
+      error('uncaught async error', error: err, stackTrace: stack);
+      return true;
+    };
   }
 
   /// Wires a repository directly, for **this package's own tests**.

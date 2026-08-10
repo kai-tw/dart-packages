@@ -125,14 +125,17 @@ void main() {
       expect(console.calls, isEmpty);
     });
 
-    test('initConsoleOnly touches no Firebase API', () {
+    test('init without Firebase wires the console instead of throwing', () {
       // The integration-harness case: the real graph is booted against no
       // backend, so `Firebase.initializeApp()` was never called and
       // `FirebaseCrashlytics.instance` would throw synchronously. This test
-      // runs with no Firebase either — if the call reached it, this would
-      // fail rather than pass, which is the whole assertion.
+      // runs with no Firebase either, so reaching it would fail here — which
+      // is the assertion.
+      //
+      // It must not throw and must not assert: both abort the rest of `init`,
+      // leaving the harness with no logging at all — the opposite of the point.
       LogSystem.reset();
-      expect(LogSystem.initConsoleOnly, returnsNormally);
+      expect(LogSystem.init, returnsNormally);
       expect(() => LogSystem.fatal('still logs'), returnsNormally);
     });
 

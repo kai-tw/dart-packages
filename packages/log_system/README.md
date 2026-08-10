@@ -45,40 +45,23 @@ throwing on the second call would take that away.
 
 ### No Firebase at all
 
-`init` requires `Firebase.initializeApp()` to have run — it throws otherwise,
-because setting the collection flag means touching `FirebaseCrashlytics`.
+`init` needs `Firebase.initializeApp()` to have run, because setting the
+collection flag means touching `FirebaseCrashlytics`. When it has not — an
+integration harness booting the real graph against no backend — `init` detects
+it (`Firebase.apps` is a registry read, safe before initialisation), wires the
+console alone, and says so through the console.
 
-For a build that has no Firebase, use `initConsoleOnly()`. It wires the console
-and nothing else, and touches no Firebase API:
+Nothing for the app to branch on, and nothing to pass.
 
-```dart
-LogSystem.initConsoleOnly();   // integration harness, or no reporter yet
-```
+Neither obvious alternative works. **Throwing** would let a logging library
+stop an app from starting, and would break the harness this case exists for.
+**Asserting** is the same thing wearing a debug badge — it aborts the rest of
+`init`, so the harness gets an exception *and* no logging. **Silence** would let
+an app that simply forgot `initializeApp()` get no crash reporting and no
+complaint.
 
-⚠️ `init(reportCrashes: false)` is **not** this case. It means Firebase *is*
-there and is being told to stay quiet. One flag cannot both switch a collection
-setting off and avoid the object that setting lives on, which is why these are
-two entry points rather than one.
-
-`init` does not detect an absent Firebase and quietly degrade, deliberately: an
-app that simply forgot `initializeApp()` would then get no crash reporting and
-no complaint.
-
-The detection belongs in the app's own wiring, where it is a fact rather than a
-guess — and `Firebase.apps` is a registry read, so it is safe to call before
-`initializeApp()`:
-
-```dart
-if (Firebase.apps.isEmpty) {
-  LogSystem.initConsoleOnly();
-} else {
-  LogSystem.init(forwardInfo: true, customKeys: …);
-}
-```
-
-Better than threading a flag down from whoever booted the app: it is correct
-for every caller in that situation rather than the one that remembered to pass
-it, and it keeps test-only knobs out of production wiring.
+⚠️ `init(reportCrashes: false)` is a different case: Firebase *is* there, and is
+being told to stay quiet.
 
 ### The console never reaches a release build
 
@@ -132,50 +115,36 @@ translate at its own boundary into a domain type whose **name** carries it:
 
 ## The two uncaught-error handlers
 
-This package does not install them — crash-zone setup belongs to app bootstrap.
-Route them through `LogSystem` so they land in the same redacted path:
+`init` installs both — `FlutterError.onError` and
+`PlatformDispatcher.instance.onError` — so nothing is copied into an app's
+bootstrap. Pass `installErrorHandlers: false` if the app installs its own, and
+note that this means `init` **reassigns two global handlers**.
 
-```dart
-// Only in release. In debug `FlutterError.onError` already defaults to
-// `presentError`, so overriding it there means reimplementing the default —
-// and calling `presentError` *and* logging prints the same error twice.
-if (kReleaseMode) {
-  FlutterError.onError = (FlutterErrorDetails details) {
-    if (details.silent) {
-      LogSystem.error('flutter: environmental framework error',
-          error: details.exception, stackTrace: details.stack);
-      return;
-    }
-    LogSystem.fatal('flutter: uncaught framework error',
-        error: details.exception, stackTrace: details.stack);
-  };
-}
+They live here because leaving them to each app is how two of them ended up
+disagreeing about which uncaught errors count as crashes. Four judgements are
+baked in:
 
-PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-  LogSystem.error('uncaught async error', error: error, stackTrace: stack);
-  return true;
-};
-```
-
-**`details.silent` is what decides fatal**, and the framework sets it at the
-throw site: "errors that could be triggered by environmental conditions (as
-opposed to logic errors)" — the HTTP library sets it so a 404 on flaky wifi
-does not read like a bug. The framework already honours it; `dumpErrorToConsole`
-skips silent errors in release. FlutterFire's `recordFlutterError` never looks
-at it, which is how its documented pattern files every one of them as a crash
-and makes crash-free users describe nothing.
-
-**The async handler is not fatal at all.** There is no `silent` to consult, and
-it returns `true` — the app saying it has handled the error and will keep
-running. Filing that as a crash contradicts the line under it.
-
-**Never call `presentError` in release.** There `dumpErrorToConsole` takes the
+**Release only, for `FlutterError.onError`.** In debug it already defaults to
+`FlutterError.presentError`, so overriding it there reimplements the default —
+and presenting *and* logging prints the same error twice while the reporter is
+disabled. Installing it release-only also keeps `presentError` out of release
+structurally: there `dumpErrorToConsole` takes the
 `debugPrintStack(label: exception.toString())` branch, and `debugPrint` is not
-assert-gated, so it prints the raw exception to logcat / oslog — the object the
-redaction exists to stop, reaching a different sink. Installing the handler
-release-only, as above, makes that structural rather than a rule to remember.
+assert-gated, so it would put the raw exception on logcat / oslog.
 
-Passing `details.exception` rather than `details` is also what drops `context`
+**`details.silent` decides fatal.** The framework sets it at the throw site —
+"errors that could be triggered by environmental conditions (as opposed to
+logic errors)"; the HTTP library sets it so a 404 on flaky wifi does not read
+like a bug — and honours it in `dumpErrorToConsole`. FlutterFire's
+`recordFlutterError` never looks at it, so its documented pattern files every
+one of them as a crash. `fatal: true` feeds crash-free users, the number a
+release is judged by.
+
+**The async handler is never fatal.** It has no `silent` to consult and it
+returns `true` — the app saying it has handled the error and will keep running.
+Filing that as a crash contradicts the line above it.
+
+**`details.exception` is passed, not `details`**, which is what drops `context`
 and `informationCollector`: both are `DiagnosticsNode`s that can carry
 widget-tree property values, such as a `Text` widget's content in an overflow
 assertion.

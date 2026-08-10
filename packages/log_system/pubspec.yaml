@@ -1,6 +1,6 @@
 name: log_system
 description: Structured logging with a redacted crash-reporting egress, shared across my Flutter projects.
-version: 0.1.4
+version: 0.2.0
 repository: https://github.com/kai-tw/dart-packages/tree/main/packages/log_system
 
 environment:
@@ -9,6 +9,7 @@ environment:
 resolution: workspace
 
 dependencies:
+  firebase_core: ^4.0.0
   firebase_crashlytics: ^5.0.5
   flutter:
     sdk: flutter
