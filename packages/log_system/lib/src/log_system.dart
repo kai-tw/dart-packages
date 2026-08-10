@@ -67,8 +67,16 @@ class LogSystem {
   /// the console reaches logcat / oslog, readable through `adb logcat`, a bug
   /// report or a sysdiagnose.
   ///
-  /// [reportCrashes] — off wires no crash reporter at all, which is what an
-  /// integration harness wants. Every level then stays device-local.
+  /// [reportCrashes] — off keeps every level device-local **and switches
+  /// Crashlytics collection off at the SDK**, which is what an integration
+  /// harness wants: gating what this package sends does nothing about the
+  /// native crash capture, which runs with no Dart code involved.
+  ///
+  /// Collection is switched on every [init], to whatever `reportCrashes &&
+  /// kReleaseMode` comes to — so it is never left at the SDK's default, which
+  /// is on. That means [init] requires Firebase to have been initialised. An
+  /// app or test that has no Firebase should not call [init] at all; every
+  /// level is a no-op until it does.
   ///
   /// [customKeys] are stamped on the crash reporter as-is and **bypass
   /// redaction entirely**, so only provably non-identifying values belong
@@ -97,17 +105,21 @@ class LogSystem {
     String? Function(Object error)? describeExtra,
   }) {
     LogErrorRedactor.describeExtra = describeExtra;
+    // The adapter is built even when it will send nothing, because building
+    // it is what switches collection **off** at the SDK. Skipping it on
+    // `reportCrashes: false` would leave the SDK's default — on — and the
+    // native layer captures a crash with no Dart code involved, so the build
+    // that most wanted silence would be the one still reporting.
     _instance = LogSystem(
       LogRepositoryImpl(
         console: LoggerAdapter(suppressInRelease: suppressConsoleInRelease),
-        report: reportCrashes
-            ? FirebaseCrashlyticsAdapter(
-                FirebaseCrashlytics.instance,
-                forwardInfo: forwardInfo,
-                customKeys: customKeys,
-                deferredCustomKeys: deferredCustomKeys,
-              )
-            : null,
+        report: FirebaseCrashlyticsAdapter(
+          FirebaseCrashlytics.instance,
+          enabled: reportCrashes && kReleaseMode,
+          forwardInfo: forwardInfo,
+          customKeys: customKeys,
+          deferredCustomKeys: deferredCustomKeys,
+        ),
       ),
     );
   }
