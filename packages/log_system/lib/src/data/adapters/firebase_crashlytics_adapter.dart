@@ -25,6 +25,13 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
     Map<String, String> customKeys = const <String, String>{},
     Future<Map<String, String>> Function()? deferredCustomKeys,
   }) : enabled = enabled ?? kReleaseMode {
+    // Collection is switched at the SDK as well as gated in this class, and
+    // both are needed: this class only guards what *it* sends, while an
+    // uncaught crash is captured by the native layer with no Dart code
+    // involved. An app that leaves the SDK's default on ships debug-run
+    // crashes to the same project as real ones.
+    unawaited(_instance.setCrashlyticsCollectionEnabled(this.enabled));
+
     if (!this.enabled) {
       return;
     }
