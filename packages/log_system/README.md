@@ -10,11 +10,11 @@ report.
 ## Wiring
 
 The facade is static, but it is **not** resolved through a service locator —
-that would make one app's DI container a dependency of every consumer. Install
-it once at startup with whatever the host app already uses:
+that would make one app's DI container a dependency of every consumer.
+Initialise it once at startup, from whatever wiring the host app already uses:
 
 ```dart
-LogSystem.install(
+LogSystem.init(
   FanOutLogRepository(
     console: LoggerAdapter(),
     report: FirebaseCrashlyticsAdapter(
@@ -27,9 +27,14 @@ LogSystem.install(
 
 Then everything calls `LogSystem.debug/info/warning/error/fatal/event`.
 
-**Logging before `install` is a silent no-op.** Unit tests that construct
+**Logging before `init` is a silent no-op.** Unit tests that construct
 production types directly never stand up the app's wiring, and a log line must
-not be why one of them throws. Do not "fix" this by asserting installation.
+not be why one of them throws. Do not "fix" this by asserting initialisation.
+
+Calling `init` again **replaces** the repository, which is a deliberate
+departure from what `init` usually implies: an integration harness swaps in a
+no-op to keep a test build off the real crash reporter, and throwing on the
+second call would take that away.
 
 Pass `report: null` for a build with no crash reporter — every level then stays
 device-local.

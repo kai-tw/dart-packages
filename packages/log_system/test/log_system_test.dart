@@ -62,12 +62,12 @@ void main() {
   setUp(() {
     console = _RecordingSink();
     report = _RecordingSink();
-    LogSystem.install(
+    LogSystem.init(
       FanOutLogRepository(console: console, report: report),
     );
   });
 
-  tearDown(LogSystem.uninstall);
+  tearDown(LogSystem.reset);
 
   group('severity routing — the reason the repository layer exists', () {
     test('debug reaches the console and never the reporter', () {
@@ -100,27 +100,27 @@ void main() {
     });
   });
 
-  group('installation', () {
-    test('logging before install is a silent no-op, not a throw', () {
+  group('initialisation', () {
+    test('logging before init is a silent no-op, not a throw', () {
       // A unit test that constructs production types directly never stands up
       // the app's wiring, and a log line must not be why it fails.
-      LogSystem.uninstall();
-      expect(LogSystem.isInstalled, isFalse);
+      LogSystem.reset();
+      expect(LogSystem.isInitialized, isFalse);
       expect(() => LogSystem.error('nothing is listening'), returnsNormally);
     });
 
-    test('install replaces an existing repository', () {
+    test('init again replaces the existing repository', () {
       // What an integration harness does to keep a test build off the real
       // crash reporter.
       final _RecordingSink replacement = _RecordingSink();
-      LogSystem.install(FanOutLogRepository(console: replacement));
+      LogSystem.init(FanOutLogRepository(console: replacement));
       LogSystem.error('e');
       expect(replacement.calls, <String>['error:e']);
       expect(console.calls, isEmpty);
     });
 
     test('a repository with no reporter keeps every level device-local', () {
-      LogSystem.install(FanOutLogRepository(console: console));
+      LogSystem.init(FanOutLogRepository(console: console));
       LogSystem.info('i');
       LogSystem.fatal('f');
       expect(console.calls, <String>['info:i', 'fatal:f']);

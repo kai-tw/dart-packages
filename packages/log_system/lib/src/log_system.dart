@@ -8,13 +8,13 @@ import 'log_repository.dart';
 /// The original version read `sl<LogSystem>()` on every call. That is fine
 /// inside one app and impossible in a package: it would make `get_it` a
 /// dependency of every consumer and hard-code one app's locator instance.
-/// [install] replaces it — a host app wires its own graph however it likes
+/// [init] replaces it — a host app wires its own graph however it likes
 /// (get_it, Riverpod, a bare constructor) and hands the result here once.
 ///
-/// **Logging before [install] is a silent no-op, on purpose.** Unit tests that
+/// **Logging before [init] is a silent no-op, on purpose.** Unit tests that
 /// construct production types directly never stand up the app's wiring, and a
 /// log line must not be the reason one of them throws. Do not "fix" it by
-/// asserting installation.
+/// asserting initialisation.
 class LogSystem {
   LogSystem._();
 
@@ -22,17 +22,19 @@ class LogSystem {
 
   /// Wires the log system. Call once, during startup, before anything logs.
   ///
-  /// Replacing an existing repository is allowed and is what an integration
-  /// harness does to keep a test build off the real crash reporter.
-  static void install(LogRepository repository) => _repository = repository;
+  /// **Replacing an existing repository is allowed**, which is a deliberate
+  /// departure from what `init` usually implies. An integration harness swaps
+  /// in a no-op repository to keep a test build off the real crash reporter,
+  /// and throwing on a second call would take that away.
+  static void init(LogRepository repository) => _repository = repository;
 
   /// Drops the wiring. Test seam — production code never calls it.
   @visibleForTesting
-  static void uninstall() => _repository = null;
+  static void reset() => _repository = null;
 
-  /// Whether a repository has been installed. A caller never needs this; it
-  /// exists so a harness can assert its own setup ran.
-  static bool get isInstalled => _repository != null;
+  /// Whether a repository has been wired. A caller never needs this; it exists
+  /// so a harness can assert its own setup ran.
+  static bool get isInitialized => _repository != null;
 
   /// Local-only, for expected non-error events — a user cancelling, an
   /// expected offline transition. Never leaves the device, and is skipped

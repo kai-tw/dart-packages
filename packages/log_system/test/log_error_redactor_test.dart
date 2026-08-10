@@ -112,8 +112,9 @@ void main() {
   group('PlatformException.code is admitted only when it is a token', () {
     test('an opaque code survives', () {
       expect(
-        LogErrorRedactor.redact(PlatformException(code: 'channel-error'))
-            .toString(),
+        LogErrorRedactor.redact(
+          PlatformException(code: 'channel-error'),
+        ).toString(),
         'PlatformException code=channel-error',
       );
     });
@@ -222,8 +223,9 @@ void main() {
         ],
       );
 
-      final FlutterErrorDetails redacted =
-          LogErrorRedactor.redactDetails(details);
+      final FlutterErrorDetails redacted = LogErrorRedactor.redactDetails(
+        details,
+      );
 
       expect(redacted.exception.toString(), '_Plain');
       expect(redacted.stack, same(stack));
