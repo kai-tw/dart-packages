@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
-import 'log_data_source.dart';
+import '../log_data_source.dart';
 import 'log_error_redactor.dart';
 
 /// Crash-reporter sink. Everything that leaves the device does so from here.
@@ -146,5 +146,13 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
       printDetails: false,
       fatal: true,
     );
+  }
+
+  @override
+  Future<void> event(String name, {Map<String, Object>? parameters}) async {
+    // No-op. An event is not a fault, and it is not a breadcrumb either — the
+    // level exists for an analytics backend an app may wire later, and letting
+    // it drip into crash reports meanwhile would make that wiring look like it
+    // had already happened.
   }
 }

@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../../domain/loggable_exception.dart';
+
 /// Reduces an error object before it crosses the log → crash-reporter boundary.
 ///
 /// Eliminates CWE-532 structurally: a raw exception's `toString()` can carry
@@ -89,6 +91,20 @@ class LogErrorRedactor {
     if (error is OSError) {
       // errno is the discriminator; the OS message string is dropped.
       return _RedactedError('$type errno=${error.errorCode}');
+    }
+    if (error is LoggableException) {
+      // An app exception that opted in by extending the template. Its code is
+      // an `int` by construction, so it cannot carry text at all; the band
+      // clamp is for the implementer who puts a timestamp or a row count
+      // there, which degrades to type-name-only rather than widening the
+      // egress.
+      final int? code = error.diagnosticCode;
+      if (code == null) {
+        return _RedactedError('$type code=-');
+      }
+      return _RedactedError(
+        (code < 0 || code > 65535) ? type : '$type code=$code',
+      );
     }
 
     return _RedactedError(type);

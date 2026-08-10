@@ -4,15 +4,22 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:log_system/log_system.dart';
 // Not exported: the redactor is package-internal, and reaching it from a test
 // inside the same package is the point of `src/`.
-import 'package:log_system/src/log_error_redactor.dart';
+import 'package:log_system/src/data/adapters/log_error_redactor.dart';
 
 class _Domain implements Exception {
   const _Domain();
 
   @override
   String toString() => 'customer 王小明, phone 0912345678';
+}
+
+/// Shaped like the real thing: a domain exception that translated a
+/// `SocketException` and kept only its errno.
+class _CloudSocketException extends LoggableException {
+  const _CloudSocketException(int? code) : super(diagnosticCode: code);
 }
 
 void main() {
@@ -192,6 +199,50 @@ void main() {
       expect(
         LogErrorRedactor.redact(PlatformException(code: 'a' * 49)).toString(),
         'PlatformException',
+      );
+    });
+  });
+
+  group('LoggableException — the template an app extends', () {
+    test('a code in range survives, and toString is never read', () {
+      final String redacted = LogErrorRedactor.redact(
+        const _CloudSocketException(61),
+      ).toString();
+      expect(redacted, '_CloudSocketException code=61');
+    });
+
+    test('a null code renders a dash', () {
+      expect(
+        LogErrorRedactor.redact(const _CloudSocketException(null)).toString(),
+        '_CloudSocketException code=-',
+      );
+    });
+
+    test('an out-of-band code degrades to type-name-only', () {
+      // The template must never be able to widen the egress, however it is
+      // misused downstream — a timestamp or a row count is not a diagnostic.
+      expect(
+        LogErrorRedactor.redact(
+          const _CloudSocketException(1700000000),
+        ).toString(),
+        '_CloudSocketException',
+      );
+      expect(
+        LogErrorRedactor.redact(const _CloudSocketException(-1)).toString(),
+        '_CloudSocketException',
+      );
+    });
+
+    test('the template itself prints no message', () {
+      // The console sees this too, so the type is never given the chance to
+      // describe itself in free text.
+      expect(
+        const _CloudSocketException(61).toString(),
+        '_CloudSocketException(code=61)',
+      );
+      expect(
+        const _CloudSocketException(null).toString(),
+        '_CloudSocketException',
       );
     });
   });

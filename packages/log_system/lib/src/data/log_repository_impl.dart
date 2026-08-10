@@ -1,5 +1,5 @@
+import '../domain/log_repository.dart';
 import 'log_data_source.dart';
-import 'log_repository.dart';
 
 /// Sends each severity to the sinks that severity is allowed to reach.
 ///
@@ -12,12 +12,13 @@ import 'log_repository.dart';
 /// | `info` | yes | breadcrumb, if the sink forwards it |
 /// | `warning` | yes | breadcrumb — never a fault entry |
 /// | `error` / `fatal` | yes | `recordError`, non-fatal / fatal |
+/// | `event` | yes | never |
 ///
 /// A failing sink rejects the combined future rather than being swallowed:
 /// logging that silently stops working is worse than logging that throws
 /// somewhere a zone handler can see it.
-class FanOutLogRepository extends LogRepository {
-  FanOutLogRepository({required LogDataSource console, LogDataSource? report})
+class LogRepositoryImpl extends LogRepository {
+  LogRepositoryImpl({required LogDataSource console, LogDataSource? report})
     : _console = console,
       _report = report;
 
@@ -27,9 +28,7 @@ class FanOutLogRepository extends LogRepository {
   /// app that has not wired one yet. Every level then stays device-local.
   final LogDataSource? _report;
 
-  Future<void> _both(
-    Future<void> Function(LogDataSource sink) call,
-  ) async {
+  Future<void> _both(Future<void> Function(LogDataSource sink) call) async {
     final LogDataSource? report = _report;
     await Future.wait(<Future<void>>[
       call(_console),
@@ -74,5 +73,12 @@ class FanOutLogRepository extends LogRepository {
       (LogDataSource sink) =>
           sink.fatal(message, error: error, stackTrace: stackTrace),
     );
+  }
+
+  @override
+  Future<void> event(String name, {Map<String, Object>? parameters}) {
+    // Console only. Routing an event to the crash reporter is how a log level
+    // quietly becomes analytics.
+    return _console.event(name, parameters: parameters);
   }
 }

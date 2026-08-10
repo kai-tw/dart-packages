@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
-import 'log_data_source.dart';
+import '../log_data_source.dart';
 
 /// Console (device-local) sink.
 ///
@@ -89,5 +89,13 @@ class LoggerAdapter extends LogDataSource {
     StackTrace? stackTrace,
   }) async {
     return _logger.f(message, error: error, stackTrace: stackTrace);
+  }
+
+  @override
+  Future<void> event(String name, {Map<String, Object>? parameters}) async {
+    if (_quiet) {
+      return;
+    }
+    return _logger.i('Event: $name\n$parameters');
   }
 }
