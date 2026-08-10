@@ -12,7 +12,6 @@ import 'log_repository.dart';
 /// | `info` | yes | breadcrumb, if the sink forwards it |
 /// | `warning` | yes | breadcrumb — never a fault entry |
 /// | `error` / `fatal` | yes | `recordError`, non-fatal / fatal |
-/// | `event` | yes | never |
 ///
 /// A failing sink rejects the combined future rather than being swallowed:
 /// logging that silently stops working is worse than logging that throws
@@ -75,10 +74,5 @@ class FanOutLogRepository extends LogRepository {
       (LogDataSource sink) =>
           sink.fatal(message, error: error, stackTrace: stackTrace),
     );
-  }
-
-  @override
-  Future<void> event(String name, {Map<String, Object>? parameters}) {
-    return _console.event(name, parameters: parameters);
   }
 }

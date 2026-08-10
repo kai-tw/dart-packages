@@ -1,15 +1,22 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
+import 'fan_out_log_repository.dart';
+import 'firebase_crashlytics_adapter.dart';
 import 'log_repository.dart';
+import 'logger_adapter.dart';
 
-/// The only symbol callers touch. Static, and **not** resolved through a
-/// service locator.
+/// The whole public surface of this package.
 ///
-/// The original version read `sl<LogSystem>()` on every call. That is fine
+/// Static, and **not** resolved through a service locator. The version this
+/// was extracted from read `sl<LogSystem>()` on every call, which is fine
 /// inside one app and impossible in a package: it would make `get_it` a
 /// dependency of every consumer and hard-code one app's locator instance.
-/// [init] replaces it — a host app wires its own graph however it likes
-/// (get_it, Riverpod, a bare constructor) and hands the result here once.
+///
+/// It also takes no objects. [init] takes flags and builds the sinks itself,
+/// so there is no wiring for a host to get wrong — assembling a
+/// console-plus-crash-reporter fan-out by hand is exactly how the egress ends
+/// up unredacted, which is the failure this package exists to prevent.
 ///
 /// **Logging before [init] is a silent no-op, on purpose.** Unit tests that
 /// construct production types directly never stand up the app's wiring, and a
@@ -22,19 +29,56 @@ class LogSystem {
 
   /// Wires the log system. Call once, during startup, before anything logs.
   ///
-  /// **Replacing an existing repository is allowed**, which is a deliberate
-  /// departure from what `init` usually implies. An integration harness swaps
-  /// in a no-op repository to keep a test build off the real crash reporter,
-  /// and throwing on a second call would take that away.
-  static void init(LogRepository repository) => _repository = repository;
+  /// [forwardInfo] — whether an `info` line becomes a crash-reporter
+  /// breadcrumb. A breadcrumb only ever surfaces alongside a later crash, so
+  /// it is cheap, but it is still an egress: an app whose `info` lines quote
+  /// anything user-derived wants this off, which leaves `info` device-local
+  /// exactly like `debug`.
+  ///
+  /// [suppressConsoleInRelease] — whether the console drops everything below
+  /// `error` in a release build. "Device-local" is not "invisible": in release
+  /// the console reaches logcat / oslog, readable through `adb logcat`, a bug
+  /// report or a sysdiagnose.
+  ///
+  /// [customKeys] are stamped on the crash reporter as-is and **bypass
+  /// redaction entirely**, so only provably non-identifying values belong
+  /// there — a commit sha, a release channel. [deferredCustomKeys] is for one
+  /// that needs a platform round-trip; it lands a moment after launch, so a
+  /// crash in the first frames may miss it.
+  ///
+  /// **Calling this again replaces the wiring** rather than throwing, which is
+  /// a deliberate departure from what `init` usually implies: an integration
+  /// harness swaps in a reporter-less setup to keep a test build off the real
+  /// crash reporter.
+  static void init({
+    bool forwardInfo = false,
+    bool suppressConsoleInRelease = false,
+    bool reportCrashes = true,
+    Map<String, String> customKeys = const <String, String>{},
+    Future<Map<String, String>> Function()? deferredCustomKeys,
+  }) {
+    _repository = FanOutLogRepository(
+      console: LoggerAdapter(suppressInRelease: suppressConsoleInRelease),
+      report: reportCrashes
+          ? FirebaseCrashlyticsAdapter(
+              FirebaseCrashlytics.instance,
+              forwardInfo: forwardInfo,
+              customKeys: customKeys,
+              deferredCustomKeys: deferredCustomKeys,
+            )
+          : null,
+    );
+  }
+
+  /// Wires a repository directly. **Package-internal test seam** — the type it
+  /// takes is not exported, so this is unusable from outside.
+  @visibleForTesting
+  static void initWithRepository(LogRepository repository) =>
+      _repository = repository;
 
   /// Drops the wiring. Test seam — production code never calls it.
   @visibleForTesting
   static void reset() => _repository = null;
-
-  /// Whether a repository has been wired. A caller never needs this; it exists
-  /// so a harness can assert its own setup ran.
-  static bool get isInitialized => _repository != null;
 
   /// Local-only, for expected non-error events — a user cancelling, an
   /// expected offline transition. Never leaves the device, and is skipped
@@ -66,12 +110,5 @@ class LogSystem {
   /// As [error], reported fatal.
   static void fatal(String message, {Object? error, StackTrace? stackTrace}) {
     _repository?.fatal(message, error: error, stackTrace: stackTrace);
-  }
-
-  /// A named occurrence, console only. This is **not** analytics dispatch —
-  /// nothing here reaches an analytics backend, and wiring it to one is a
-  /// consent decision, not a plumbing change.
-  static void event(String name, {Map<String, Object>? parameters}) {
-    _repository?.event(name, parameters: parameters);
   }
 }

@@ -4,31 +4,26 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:log_system/log_system.dart';
+// Not exported: the redactor is package-internal, and reaching it from a test
+// inside the same package is the point of `src/`.
+import 'package:log_system/src/log_error_redactor.dart';
 
-class _CodedFailure implements Exception, LogDiagnosticCode {
-  const _CodedFailure(this.diagnosticCode);
-
-  @override
-  final int? diagnosticCode;
-
-  @override
-  String toString() => 'the customer is 王小明, phone 0912345678';
-}
-
-class _Plain implements Exception {
-  const _Plain();
+class _Domain implements Exception {
+  const _Domain();
 
   @override
-  String toString() => 'plaintext-secret';
+  String toString() => 'customer 王小明, phone 0912345678';
 }
 
 void main() {
-  tearDown(LogErrorRedactor.resetRules);
-
   group('default-deny', () {
     test('an unrecognised type is reduced to its type name', () {
-      expect(LogErrorRedactor.redact(const _Plain()).toString(), '_Plain');
+      final String redacted = LogErrorRedactor.redact(
+        const _Domain(),
+      ).toString();
+      expect(redacted, '_Domain');
+      expect(redacted, isNot(contains('王小明')));
+      expect(redacted, isNot(contains('0912345678')));
     });
 
     test('the shape that actually leaks does not survive', () {
@@ -63,8 +58,8 @@ void main() {
         startsWith('SocketException'),
       );
       expect(
-        LogErrorRedactor.redact(const _Plain()).toString(),
-        startsWith('_Plain'),
+        LogErrorRedactor.redact(const _Domain()).toString(),
+        startsWith('_Domain'),
       );
     });
   });
@@ -74,7 +69,6 @@ void main() {
       const SocketException error = SocketException(
         'Connection refused',
         osError: OSError('Connection refused', 61),
-        address: null,
         port: 443,
       );
       expect(
@@ -145,76 +139,11 @@ void main() {
     });
   });
 
-  group('LogDiagnosticCode opt-in', () {
-    test('a code in range is forwarded, and toString is never read', () {
-      final String redacted = LogErrorRedactor.redact(
-        const _CodedFailure(61),
-      ).toString();
-      expect(redacted, '_CodedFailure code=61');
-      expect(redacted, isNot(contains('王小明')));
-      expect(redacted, isNot(contains('0912345678')));
-    });
-
-    test('a null code renders a dash', () {
-      expect(
-        LogErrorRedactor.redact(const _CodedFailure(null)).toString(),
-        '_CodedFailure code=-',
-      );
-    });
-
-    test('an out-of-band code is treated as a smuggle and dropped', () {
-      // The marker must never be able to widen the egress surface, however it
-      // is misused downstream.
-      expect(
-        LogErrorRedactor.redact(const _CodedFailure(1700000000)).toString(),
-        '_CodedFailure',
-      );
-      expect(
-        LogErrorRedactor.redact(const _CodedFailure(-1)).toString(),
-        '_CodedFailure',
-      );
-    });
-  });
-
-  group('host-registered rules', () {
-    test('a rule runs before the built-in arms and can override one', () {
-      LogErrorRedactor.addRule(
-        LogErrorRule(
-          matches: (Object error) => error is SocketException,
-          describe: (Object error, String type) => '$type overridden',
-        ),
-      );
-      expect(
-        LogErrorRedactor.redact(const SocketException('x')).toString(),
-        'SocketException overridden',
-      );
-    });
-
-    test('rules are consulted in registration order', () {
-      LogErrorRedactor.addRule(
-        LogErrorRule(
-          matches: (Object error) => error is _Plain,
-          describe: (Object error, String type) => '$type first',
-        ),
-      );
-      LogErrorRedactor.addRule(
-        LogErrorRule(
-          matches: (Object error) => error is _Plain,
-          describe: (Object error, String type) => '$type second',
-        ),
-      );
-      expect(
-        LogErrorRedactor.redact(const _Plain()).toString(),
-        '_Plain first',
-      );
-    });
-  });
-
   group('redactDetails', () {
     test('drops context and information, keeps stack and library', () {
       final StackTrace stack = StackTrace.current;
       final FlutterErrorDetails details = FlutterErrorDetails(
-        exception: const _Plain(),
+        exception: const _Domain(),
         stack: stack,
         library: 'my_app',
         context: ErrorDescription('while building CustomerCard for 王小明'),
@@ -227,7 +156,7 @@ void main() {
         details,
       );
 
-      expect(redacted.exception.toString(), '_Plain');
+      expect(redacted.exception.toString(), '_Domain');
       expect(redacted.stack, same(stack));
       expect(redacted.library, 'my_app');
       expect(redacted.context, isNull);

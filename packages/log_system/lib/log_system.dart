@@ -1,14 +1,14 @@
 /// Structured logging with a redacted crash-reporting egress.
 ///
-/// Call [LogSystem.install] once at startup with a [LogRepository]; everything
-/// after that goes through the static [LogSystem] facade.
+/// The entire public surface is [LogSystem] — `init` once at startup, then
+/// `debug` / `info` / `warning` / `error` / `fatal` from anywhere.
+///
+/// Everything else (the repository, the sinks, the redactor) is deliberately
+/// unexported. They are the reason this package exists rather than a snippet,
+/// but a caller who has to assemble them is a caller who can assemble them
+/// *wrong* — and getting the crash-reporter egress wrong is the failure this
+/// package was extracted to prevent. Configuration is flags on [LogSystem.init]
+/// instead.
 library;
 
-export 'src/fan_out_log_repository.dart';
-export 'src/firebase_crashlytics_adapter.dart';
-export 'src/log_data_source.dart';
-export 'src/log_diagnostic_code.dart';
-export 'src/log_error_redactor.dart';
-export 'src/log_repository.dart';
-export 'src/log_system.dart';
-export 'src/logger_adapter.dart';
+export 'src/log_system.dart' show LogSystem;

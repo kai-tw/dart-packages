@@ -7,37 +7,42 @@ an app has shipped: per-severity routing, a release-only egress gate, and a
 redactor that stops an exception's `toString()` carrying user data into a crash
 report.
 
-## Wiring
-
-The facade is static, but it is **not** resolved through a service locator —
-that would make one app's DI container a dependency of every consumer.
-Initialise it once at startup, from whatever wiring the host app already uses:
+## The whole API
 
 ```dart
-LogSystem.init(
-  FanOutLogRepository(
-    console: LoggerAdapter(),
-    report: FirebaseCrashlyticsAdapter(
-      FirebaseCrashlytics.instance,
-      customKeys: <String, String>{'git_sha': BuildInfo.gitSha},
-    ),
-  ),
-);
+LogSystem.init();                                   // once, at startup
+
+LogSystem.debug('cache miss');
+LogSystem.info('sync: round finished');
+LogSystem.warning('sync: retrying', error: e, stackTrace: s);
+LogSystem.error('sync: round failed', error: e, stackTrace: s);
+LogSystem.fatal('db: unreadable', error: e, stackTrace: s);
 ```
 
-Then everything calls `LogSystem.debug/info/warning/error/fatal/event`.
+That is deliberately all of it. The repository, the sinks and the redactor are
+unexported: they are the reason this package exists rather than a snippet, but
+a caller who has to assemble them is a caller who can assemble them *wrong* —
+and getting the crash-reporter egress wrong is the failure it was extracted to
+prevent. Configuration is flags, not objects.
 
 **Logging before `init` is a silent no-op.** Unit tests that construct
 production types directly never stand up the app's wiring, and a log line must
 not be why one of them throws. Do not "fix" this by asserting initialisation.
 
-Calling `init` again **replaces** the repository, which is a deliberate
-departure from what `init` usually implies: an integration harness swaps in a
-no-op to keep a test build off the real crash reporter, and throwing on the
-second call would take that away.
+Calling `init` again **replaces** the wiring, which is a deliberate departure
+from what `init` usually implies: an integration harness passes
+`reportCrashes: false` to keep a test build off the real crash reporter, and
+throwing on the second call would take that away.
 
-Pass `report: null` for a build with no crash reporter — every level then stays
-device-local.
+### Flags
+
+| flag | default | what it decides |
+|---|---|---|
+| `forwardInfo` | `false` | whether an `info` line becomes a crash-reporter breadcrumb. Cheap — a breadcrumb only surfaces alongside a later crash — but still an egress. Off leaves `info` device-local, like `debug`. |
+| `suppressConsoleInRelease` | `false` | whether the console drops everything below `error` in release. "Device-local" is not "invisible": in release the console reaches logcat / oslog. |
+| `reportCrashes` | `true` | off wires no crash reporter at all. Every level then stays device-local. |
+| `customKeys` | `{}` | stamped on the crash reporter as-is. **Bypasses redaction**, so only provably non-identifying values belong here — a commit sha, a release channel. |
+| `deferredCustomKeys` | `null` | for a key needing a platform round-trip. Lands a moment after launch, so a crash in the first frames may miss it. |
 
 ## Severity routing
 
@@ -47,23 +52,20 @@ device-local.
 | `info` | yes | breadcrumb, if `forwardInfo` |
 | `warning` | yes | breadcrumb — never a fault entry |
 | `error` / `fatal` | yes | `recordError`, non-fatal / fatal |
-| `event` | yes | never |
 
-`event` is **not** analytics dispatch. Nothing here reaches an analytics
-backend, and wiring it to one is a consent decision, not a plumbing change.
+`info` takes no error object on purpose: it describes an expected condition. An
+exception worth keeping makes it a `warning` or an `error`.
 
 ## Redaction
 
-Everything crossing to the crash reporter goes through `LogErrorRedactor`, and
-no caller can opt out. An exception is reduced to a surrogate carrying its
-runtime type name plus, for a few allow-listed types, one closed-vocabulary
-structural field:
+Everything crossing to the crash reporter is reduced first, and no caller can
+opt out. An exception arrives as a surrogate carrying its runtime type name
+plus, for a few allow-listed types, one closed-vocabulary structural field:
 
 | type | kept | dropped |
 |---|---|---|
 | `PlatformException` | `code`, when it looks like an opaque token | `message`, `details` |
 | `SocketException` / `FileSystemException` / `OSError` | `errno` | `address`, `path`, `message` |
-| anything implementing `LogDiagnosticCode` | `diagnosticCode`, band-clamped | everything else |
 | everything else | type name only | everything |
 
 The redactor never calls `toString()` on the untrusted original — it reads
@@ -72,54 +74,44 @@ leak through nor throw. The surrogate's own `toString()` **leads with the type
 name** so the reporter's non-fatal grouping still separates distinct error
 types instead of collapsing them into one issue (flutterfire #3310).
 
-### Teaching it about a type this package cannot depend on
-
-```dart
-LogErrorRedactor.addRule(
-  LogErrorRule(
-    matches: (Object e) => e is DioException,
-    describe: (Object e, String type) =>
-        '$type status=${(e as DioException).response?.statusCode ?? '-'}',
-  ),
-);
-```
-
-Rules run before the built-in arms, in registration order, so one can also
-override a built-in. `describe` must lead with `type`, or grouping breaks.
-
-`DioException` is a rule rather than a built-in arm on purpose: a built-in
-would drag `package:dio` into consumers that removed their HTTP client.
+The arms cover `dart:io` and `package:flutter` only — types every consumer
+already has. An arm for another package's exception would make that package a
+dependency of everyone, so an app that wants a distinction preserved should
+translate at its own boundary into a domain type whose **name** carries it:
+`CloudOfflineException` reads better in a crash report than
+`SocketException errno=61` anyway.
 
 ## The framework-fatal path
 
-`FlutterError.onError` does not go through the facade. Redact its details
-before handing them over:
+`FlutterError.onError` does not go through `LogSystem`, and this package does
+not install it — crash-zone setup belongs to app bootstrap. Route it through
+`LogSystem.fatal` so it lands in the same redacted path:
 
 ```dart
 FlutterError.onError = (FlutterErrorDetails details) {
   if (kDebugMode) {
     FlutterError.presentError(details);
   }
-  FirebaseCrashlytics.instance.recordFlutterFatalError(
-    LogErrorRedactor.redactDetails(details),
+  LogSystem.fatal(
+    'flutter: uncaught framework error',
+    error: details.exception,
+    stackTrace: details.stack,
   );
+};
+
+PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+  LogSystem.fatal('uncaught async error', error: error, stackTrace: stack);
+  return true;
 };
 ```
 
-`redactDetails` drops `context` and `informationCollector` as well as reducing
-the exception — both are `DiagnosticsNode`s that can carry widget-tree property
-values, such as a `Text` widget's content in an overflow assertion.
+`presentError` is gated on debug deliberately. In release `dumpErrorToConsole`
+takes the `debugPrintStack(label: exception.toString())` branch, and
+`debugPrint` is not assert-gated — calling it unconditionally prints the raw
+exception to logcat / oslog, which is the object the redactor exists to stop,
+reaching a different sink.
 
-`presentError` is gated on debug deliberately. In release
-`dumpErrorToConsole` takes the `debugPrintStack(label: exception.toString())`
-branch, and `debugPrint` is not assert-gated — so calling it unconditionally
-prints the raw exception to logcat / oslog, which is the object the redactor
-exists to stop, reaching a different sink.
-
-## Console fidelity
-
-`LoggerAdapter` forwards the **raw** error. The console is on-device developer
-diagnostics, not a cloud egress. It is not invisible, though: in a release
-build it reaches logcat / oslog, so an app whose log lines quote anything
-user-derived should pass `suppressInRelease: true`, which drops everything
-below `error` in release.
+Passing `details.exception` rather than `details` is also what drops `context`
+and `informationCollector`: both are `DiagnosticsNode`s that can carry
+widget-tree property values, such as a `Text` widget's content in an overflow
+assertion.

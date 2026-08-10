@@ -90,12 +90,4 @@ class LoggerAdapter extends LogDataSource {
   }) async {
     return _logger.f(message, error: error, stackTrace: stackTrace);
   }
-
-  @override
-  Future<void> event(String name, {Map<String, Object>? parameters}) async {
-    if (_quiet) {
-      return;
-    }
-    return _logger.i('Event: $name\n$parameters');
-  }
 }

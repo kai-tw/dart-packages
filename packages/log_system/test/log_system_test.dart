@@ -1,5 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:log_system/log_system.dart';
+// Not exported. A host app configures via flags on `LogSystem.init`; these are
+// the internals those flags assemble, reachable from inside the package only.
+import 'package:log_system/src/fan_out_log_repository.dart';
+import 'package:log_system/src/log_data_source.dart';
 
 /// Records what each level was asked to do, without touching a real sink.
 class _RecordingSink extends LogDataSource {
@@ -48,11 +52,6 @@ class _RecordingSink extends LogDataSource {
     calls.add('fatal:$message');
     errors.add(error);
   }
-
-  @override
-  Future<void> event(String name, {Map<String, Object>? parameters}) async {
-    calls.add('event:$name');
-  }
 }
 
 void main() {
@@ -62,7 +61,7 @@ void main() {
   setUp(() {
     console = _RecordingSink();
     report = _RecordingSink();
-    LogSystem.init(
+    LogSystem.initWithRepository(
       FanOutLogRepository(console: console, report: report),
     );
   });
@@ -73,14 +72,6 @@ void main() {
     test('debug reaches the console and never the reporter', () {
       LogSystem.debug('local only');
       expect(console.calls, <String>['debug:local only']);
-      expect(report.calls, isEmpty);
-    });
-
-    test('event reaches the console and never the reporter', () {
-      // An analytics backend is a different system with a different consent
-      // story. Routing an event there by accident is how one becomes the other.
-      LogSystem.event('opened');
-      expect(console.calls, <String>['event:opened']);
       expect(report.calls, isEmpty);
     });
 
@@ -105,7 +96,6 @@ void main() {
       // A unit test that constructs production types directly never stands up
       // the app's wiring, and a log line must not be why it fails.
       LogSystem.reset();
-      expect(LogSystem.isInitialized, isFalse);
       expect(() => LogSystem.error('nothing is listening'), returnsNormally);
     });
 
@@ -113,14 +103,16 @@ void main() {
       // What an integration harness does to keep a test build off the real
       // crash reporter.
       final _RecordingSink replacement = _RecordingSink();
-      LogSystem.init(FanOutLogRepository(console: replacement));
+      LogSystem.initWithRepository(
+        FanOutLogRepository(console: replacement),
+      );
       LogSystem.error('e');
       expect(replacement.calls, <String>['error:e']);
       expect(console.calls, isEmpty);
     });
 
     test('a repository with no reporter keeps every level device-local', () {
-      LogSystem.init(FanOutLogRepository(console: console));
+      LogSystem.initWithRepository(FanOutLogRepository(console: console));
       LogSystem.info('i');
       LogSystem.fatal('f');
       expect(console.calls, <String>['info:i', 'fatal:f']);

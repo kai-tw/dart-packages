@@ -147,10 +147,4 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
       fatal: true,
     );
   }
-
-  @override
-  Future<void> event(String name, {Map<String, Object>? parameters}) async {
-    // Console only. An analytics event is a different system with a different
-    // consent story; routing it here by accident is how one becomes the other.
-  }
 }
