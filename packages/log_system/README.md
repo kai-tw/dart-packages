@@ -64,6 +64,22 @@ two entry points rather than one.
 app that simply forgot `initializeApp()` would then get no crash reporting and
 no complaint.
 
+The detection belongs in the app's own wiring, where it is a fact rather than a
+guess — and `Firebase.apps` is a registry read, so it is safe to call before
+`initializeApp()`:
+
+```dart
+if (Firebase.apps.isEmpty) {
+  LogSystem.initConsoleOnly();
+} else {
+  LogSystem.init(forwardInfo: true, customKeys: …);
+}
+```
+
+Better than threading a flag down from whoever booted the app: it is correct
+for every caller in that situation rather than the one that remembered to pass
+it, and it keeps test-only knobs out of production wiring.
+
 ### The console never reaches a release build
 
 `logger`'s default `DevelopmentFilter` wraps its whole decision in
