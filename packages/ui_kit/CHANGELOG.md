@@ -9,7 +9,11 @@
   loading state on failure, so the buttons come back live; what the user sees is
   the caller's decision.
 
-  Migration: handle the failure where `onDelete` is written.
+  Migration is not a one-line move. A caller that passed these may have no
+  failure path of its own at all — the dialog *was* its error UI — so removing
+  them leaves a delete that fails silently: the buttons come back and nothing is
+  said. Add the handling around `onDelete` before bumping, and cover it: telling
+  a user a delete succeeded when it did not is the failure this shape invites.
 
 ## 1.2.0
 - `CommonNavTile` (all three named constructors) gains an optional `subtitle`
