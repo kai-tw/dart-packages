@@ -99,6 +99,13 @@ project's analyzer step is edited.
 rules over a directory whose stock-analyzer errors it has not triaged yet, and
 collapsing the two keys would force it to choose.
 
+Left empty, the stock analyzer receives **the areas' own roots** — not the
+repository root. That distinction is not cosmetic: a Flutter project's `build/`
+holds hundreds of generated files that no `analysis_options.yaml` excludes by
+default, and pointing the analyzer at the root reports every one of them.
+Measured on one project, 912 of its 995 findings came from `build/` and 5 from
+`lib/`. Set `paths` explicitly only to *narrow* further.
+
 ## The analyzer version pin
 
 `analyzer: ">=10.0.0 <11.0.0"`. **Three independent constraints hold it there.**

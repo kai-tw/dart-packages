@@ -68,9 +68,17 @@ class LintRunner {
         ? paths.map((String path) => p.normalize(p.absolute(path))).toList()
         : <String>[config.rootDirectory];
 
+    // The stock analyzer gets the areas' own roots, not the repository root.
+    // Handing it the root would walk everything the areas deliberately leave
+    // out — a Flutter project's `build/` alone is hundreds of generated files,
+    // and reporting them says nothing about the code anyone wrote. An explicit
+    // path on the command line still wins, and `analyzer.paths` overrides both.
     final int analyzerIssues = skipAnalyze
         ? 0
-        : analyzer.run(config.analyzer, scanRoots);
+        : analyzer.run(
+            config.analyzer,
+            paths.isNotEmpty ? scanRoots : _areaRoots(areas),
+          );
 
     final List<LintViolation> violations = <LintViolation>[];
     final List<String> unresolved = <String>[];
@@ -192,6 +200,34 @@ class LintRunner {
     }
 
     return _FileOutcome(violations: violations, source: result.content);
+  }
+
+  /// The directory prefixes the areas' globs start from, for the stock
+  /// analyzer — which takes paths, not patterns.
+  ///
+  /// `lib/**` yields `lib`. A glob whose first segment is itself a pattern
+  /// (`packages/*/lib/**`) has no fixed prefix, so the repository root is the
+  /// only honest answer for it; the analyzer's own exclusions take over there.
+  List<String> _areaRoots(List<Area> areas) {
+    final Set<String> roots = <String>{};
+    for (final Area area in areas) {
+      for (final Glob glob in area.pathGlobs) {
+        final String first = glob.pattern.split('/').first;
+        roots.add(
+          first.isEmpty || first.contains('*') || first.contains('{')
+              ? config.rootDirectory
+              : p.join(config.rootDirectory, first),
+        );
+      }
+    }
+    return roots
+        .where(
+          (String path) =>
+              FileSystemEntity.isDirectorySync(path) ||
+              FileSystemEntity.isFileSync(path),
+        )
+        .toList()
+      ..sort();
   }
 
   BuiltRules _rulesFor(Area area) => _rulesByArea.putIfAbsent(
