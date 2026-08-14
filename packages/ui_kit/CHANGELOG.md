@@ -1,3 +1,16 @@
+## 2.0.0
+- **BREAKING** — `CommonDeleteDialog` (and its `.show` helper) drops
+  `errorMessageBuilder` and `onError`. A failure in `onDelete` now propagates to
+  the caller instead of being caught and rendered inside the dialog.
+
+  The dialog knows nothing about an arbitrary callback's exception types, so the
+  only report it could produce was `toString()` in a text field — away from the
+  caller's own error handling, where the type is known. It still clears its
+  loading state on failure, so the buttons come back live; what the user sees is
+  the caller's decision.
+
+  Migration: handle the failure where `onDelete` is written.
+
 ## 1.2.0
 - `CommonNavTile` (all three named constructors) gains an optional `subtitle`
   param, rendered as the tile's `ListTile.subtitle`.

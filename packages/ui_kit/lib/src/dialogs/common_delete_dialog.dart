@@ -27,8 +27,6 @@ class CommonDeleteDialog extends StatefulWidget {
     required this.deleteLabel,
     this.deleteIcon = Icons.delete_rounded,
     required this.onDelete,
-    this.errorMessageBuilder,
-    this.onError,
     this.confirmPhrase,
     this.confirmFieldHint,
   }) : assert(
@@ -42,19 +40,6 @@ class CommonDeleteDialog extends StatefulWidget {
   final String deleteLabel;
   final IconData deleteIcon;
   final Future<void> Function() onDelete;
-  @Deprecated(
-    'Never invoked: onDelete failures now propagate to the caller instead of '
-    'being rendered here. Handle the failure where onDelete is written. '
-    'Will be removed in the next minor release.',
-  )
-  final String Function(Object error)? errorMessageBuilder;
-
-  @Deprecated(
-    'Never invoked: onDelete failures now propagate to the caller instead of '
-    'being caught here. Handle the failure where onDelete is written. '
-    'Will be removed in the next minor release.',
-  )
-  final void Function(Object error, StackTrace stackTrace)? onError;
   final String? confirmPhrase;
   final String? confirmFieldHint;
 
@@ -69,8 +54,6 @@ class CommonDeleteDialog extends StatefulWidget {
     required String deleteLabel,
     IconData deleteIcon = Icons.delete_rounded,
     required Future<void> Function() onDelete,
-    String Function(Object error)? errorMessageBuilder,
-    void Function(Object error, StackTrace stackTrace)? onError,
     String? confirmPhrase,
     String? confirmFieldHint,
   }) {
@@ -84,8 +67,6 @@ class CommonDeleteDialog extends StatefulWidget {
         deleteLabel: deleteLabel,
         deleteIcon: deleteIcon,
         onDelete: onDelete,
-        errorMessageBuilder: errorMessageBuilder,
-        onError: onError,
         confirmPhrase: confirmPhrase,
         confirmFieldHint: confirmFieldHint,
       ),
