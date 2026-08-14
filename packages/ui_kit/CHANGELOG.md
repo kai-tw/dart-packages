@@ -1,30 +1,19 @@
 ## 2.0.0
-- **BREAKING** — `CommonDeleteDialog` asks for confirmation and nothing else.
-  `onDelete`, `onError` and `errorMessageBuilder` are gone; `show` now resolves
-  to `bool` — `true` when confirmed, `false` for every other way out, including
-  a back gesture.
+- **BREAKING** — `CommonDeleteDialog` (and its `.show` helper) drops
+  `errorMessageBuilder` and `onError`. A failure in `onDelete` now propagates to
+  the caller instead of being caught and rendered inside the dialog.
 
-  ```dart
-  final bool confirmed = await CommonDeleteDialog.show(context, …);
-  if (!confirmed) {
-    return;
-  }
-  await repository.delete(id);
-  ```
+  The dialog knows nothing about an arbitrary callback's exception types, so the
+  only report it could produce was `toString()` in a text field — away from the
+  caller's own error handling, where the type is known. It still clears its
+  loading state on failure, so the buttons come back live; what the user sees is
+  the caller's decision.
 
-  Running the caller's work put it somewhere with no vocabulary to report it:
-  the dialog knows nothing about an arbitrary callback's exception types, so its
-  only possible report was `toString()` in a text field. The error-message
-  builder, the logging hook, the loading flag and the spinner were all
-  consequences of that one decision, as was a class of bugs where the dialog
-  closed on a delete that had not happened. Returning a decision removes the
-  cause rather than each symptom.
-
-  Migration is not a rename. Move the `onDelete` body to after the `show` call
-  and give it a failure path there — a caller that passed the old callbacks may
-  have had none of its own, because the dialog *was* its error UI. Telling a
-  user a delete succeeded when it did not is the failure this shape invites, so
-  cover the new path with a test.
+  Migration is not a one-line move. A caller that passed these may have no
+  failure path of its own at all — the dialog *was* its error UI — so removing
+  them leaves a delete that fails silently: the buttons come back and nothing is
+  said. Add the handling around `onDelete` before bumping, and cover it: telling
+  a user a delete succeeded when it did not is the failure this shape invites.
 
 ## 1.2.0
 - `CommonNavTile` (all three named constructors) gains an optional `subtitle`

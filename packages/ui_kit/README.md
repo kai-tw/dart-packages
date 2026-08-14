@@ -35,9 +35,9 @@ class SimpleWidget extends StatelessWidget {
 - **CommonSuccessDialog**: a success-confirmation dialog.
 - **CommonProgressDialog**: switches between the three dialogs above by
   `CommonProgressStatus` (loading/success/error).
-- **CommonDeleteDialog**: asks for confirmation of a destructive action and
-  resolves to `true`/`false`. It does not perform the action — the caller does,
-  where the failure can be reported in its own vocabulary.
+- **CommonDeleteDialog**: confirm-then-delete dialog that manages its own
+  async lifecycle around `onDelete` — spinner while it runs, stays open with
+  an inline error on failure.
 
 ### Text ownership
 
