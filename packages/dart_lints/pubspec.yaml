@@ -1,0 +1,29 @@
+name: dart_lints
+description: >-
+  Configurable custom Dart lint rules, shared across my projects. Areas and
+  enabled rules come from a per-repo YAML file, so the same rule set serves an
+  app and a pure-Dart library without either inheriting the other's house rules.
+version: 0.1.0
+repository: https://github.com/kai-tw/dart-packages/tree/main/packages/dart_lints
+
+environment:
+  sdk: ^3.8.0
+
+resolution: workspace
+
+dependencies:
+  # Pinned to the 10.x line by THREE independent constraints — do not lift any
+  # one of them in isolation:
+  #   1. This package. analyzer 12.0.0 removed ClassDeclaration.name/.members,
+  #      which 8 rule files use directly.
+  #   2. The consuming app's codegen stack. build / freezed / json_serializable
+  #      / source_gen / build_runner all declare analyzer <11.0.0.
+  #   3. dart_style 3.1.7 declares analyzer >=10.0.0 <12.0.0.
+  analyzer: ">=10.0.0 <11.0.0"
+  glob: ^2.1.0
+  path: ^1.9.0
+  yaml: ^3.1.0
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.25.0

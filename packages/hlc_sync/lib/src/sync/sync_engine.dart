@@ -341,7 +341,11 @@ class SyncEngine {
     int pushed = 0;
     int pulled = 0;
     int merged = 0;
-    int skipped = 0;
+    // Always zero here now. A record used to be skipped when applying it threw;
+    // that throw is a source-validation defect and is left to propagate, so
+    // this pass either applies a record or fails loudly. The field stays on
+    // [SyncReport] because the file-level pass still reports skips through it.
+    const int skipped = 0;
     final List<SyncConflict> conflicts = <SyncConflict>[];
 
     // The union: a record present on only one side still has to be considered,
@@ -360,76 +364,64 @@ class SyncEngine {
 
       // Applying is where cloud values are finally cast to their real types,
       // so a field holding the wrong JSON type throws here rather than at
-      // decode. Without this the throw would unwind the whole round — every
-      // later record and every later record type — and because the base is
-      // never advanced, the next round would replay the same file and fail
-      // identically. Sync would be dead until someone deleted a file they
-      // cannot see, `drive.appdata` being invisible in the Drive UI.
-      try {
-        switch (resolution.outcome) {
-          case RecordOutcome.inSync:
-            // Still advance the base: the two sides agree now, and recording
-            // that is what lets a later one-sided edit fast-forward instead of
-            // looking like a conflict against stale ancestry.
-            final SyncRecord? agreed = localRecord ?? remoteRecord;
-            if (agreed != null) {
-              await _advanceBase(source.recordType, agreed);
-            }
+      // decode. That throw is deliberately NOT contained: a cast failure means
+      // the source accepted a value it should have validated, which is a defect
+      // in the source, and skipping the record would hide it while quietly
+      // dropping data. A [SyncableSource] must validate what it applies rather
+      // than cast blindly.
+      //
+      // The cost of that ruling is real and worth stating: an unvalidated
+      // source throwing here unwinds the round, and because the base is never
+      // advanced the next round replays the same file and fails identically —
+      // sync stays dead until the source is fixed. Cloud transport failures
+      // (offline, storage) propagate for the same reason: a round whose uploads
+      // all failed must not report success.
+      switch (resolution.outcome) {
+        case RecordOutcome.inSync:
+          // Still advance the base: the two sides agree now, and recording
+          // that is what lets a later one-sided edit fast-forward instead of
+          // looking like a conflict against stale ancestry.
+          final SyncRecord? agreed = localRecord ?? remoteRecord;
+          if (agreed != null) {
+            await _advanceBase(source.recordType, agreed);
+          }
 
-          case RecordOutcome.takeLocal:
-            await _push(dir, localRecord!);
-            await _advanceBase(source.recordType, localRecord);
-            pushed++;
+        case RecordOutcome.takeLocal:
+          await _push(dir, localRecord!);
+          await _advanceBase(source.recordType, localRecord);
+          pushed++;
 
-          case RecordOutcome.takeCloud:
-            await source.applyRemote(remoteRecord!);
-            await _advanceBase(source.recordType, remoteRecord);
-            pulled++;
+        case RecordOutcome.takeCloud:
+          await source.applyRemote(remoteRecord!);
+          await _advanceBase(source.recordType, remoteRecord);
+          pulled++;
 
-          case RecordOutcome.merge:
-            // Each side keeps the fields it moved. The merged record is then
-            // pushed so the cloud carries the union too, otherwise the next
-            // round would see the same divergence again.
-            await source.applyMerge(remoteRecord!, resolution.cloudFields);
-            final SyncRecord mergedRecord = _mergeRecords(
-              local: localRecord!,
-              cloud: remoteRecord,
-              cloudFields: resolution.cloudFields,
-            );
-            await _push(dir, mergedRecord);
-            await _advanceBase(source.recordType, mergedRecord);
-            merged++;
+        case RecordOutcome.merge:
+          // Each side keeps the fields it moved. The merged record is then
+          // pushed so the cloud carries the union too, otherwise the next
+          // round would see the same divergence again.
+          await source.applyMerge(remoteRecord!, resolution.cloudFields);
+          final SyncRecord mergedRecord = _mergeRecords(
+            local: localRecord!,
+            cloud: remoteRecord,
+            cloudFields: resolution.cloudFields,
+          );
+          await _push(dir, mergedRecord);
+          await _advanceBase(source.recordType, mergedRecord);
+          merged++;
 
-          case RecordOutcome.conflict:
-            // Nothing is written and the base is not advanced. Both sides keep
-            // what they had, and the record stays divergent until someone
-            // chooses — which is the point: an unresolved conflict must not
-            // quietly resolve itself on the next round.
-            conflicts.add(
-              SyncConflict(
-                recordType: source.recordType,
-                id: id,
-                fields: resolution.conflictingFields,
-              ),
-            );
-        }
-      } on CloudOfflineException {
-        // Not this record's fault and not survivable by moving to the next
-        // one. Letting it past is what keeps a round whose uploads all failed
-        // from reporting success — the catch below would otherwise turn a dead
-        // connection into "synced, a few records skipped".
-        rethrow;
-      } on CloudStorageException {
-        rethrow;
-      } on Object catch (error) {
-        // The type only: the exception can carry the record's own field
-        // values — a database driver may put bound statement parameters in
-        // `toString` — and the sink behind [SyncWarning] may well forward off
-        // the device.
-        _warn(
-          'Skipped a ${source.recordType} record: ${error.runtimeType}',
-        );
-        skipped++;
+        case RecordOutcome.conflict:
+          // Nothing is written and the base is not advanced. Both sides keep
+          // what they had, and the record stays divergent until someone
+          // chooses — which is the point: an unresolved conflict must not
+          // quietly resolve itself on the next round.
+          conflicts.add(
+            SyncConflict(
+              recordType: source.recordType,
+              id: id,
+              fields: resolution.conflictingFields,
+            ),
+          );
       }
     }
 

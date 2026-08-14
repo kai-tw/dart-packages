@@ -86,6 +86,20 @@ class Hlc implements Comparable<Hlc> {
     return Hlc(physicalMs: physicalMs, logical: logical, nodeId: nodeId);
   }
 
+  /// [Hlc.decode], returning null instead of throwing on a malformed string.
+  ///
+  /// A stamp arriving from cloud storage malformed is an ordinary, expected
+  /// condition rather than a fault, so a caller that means to tolerate it says
+  /// so with a null check. Catching the exception instead would also swallow a
+  /// defect in the decoder itself and report it as "this field has no stamp".
+  static Hlc? tryDecode(String s) {
+    try {
+      return Hlc.decode(s);
+    } on HlcDecodeException {
+      return null;
+    }
+  }
+
   final int physicalMs;
   final int logical;
   final String nodeId;

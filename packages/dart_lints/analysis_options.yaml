@@ -1,0 +1,18 @@
+# Extends the workspace configuration rather than replacing it, so this package
+# is held to the same 71 rules as everything else here.
+include: ../../analysis_options.yaml
+
+analyzer:
+  errors:
+    # analyzer 10.x deprecates `ClassDeclaration.name` in favour of `namePart`,
+    # but `namePart` is declared only in `package:analyzer/src/dart/ast/ast.dart`
+    # — the implementation library. Reaching it means an `implementation_imports`
+    # violation, which this workspace also forbids. The deprecation therefore has
+    # no public replacement on the version line this package is pinned to, and
+    # the 17 call sites have nowhere to migrate.
+    #
+    # Remove this the moment `namePart` is exported publicly, or when the pin
+    # moves — analyzer 12 removes `name` outright, so the migration becomes
+    # mandatory rather than optional at that point. The rules that use it carry
+    # tests, so the breakage will be loud.
+    deprecated_member_use: ignore
