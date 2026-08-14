@@ -3,7 +3,7 @@ description: >-
   Configurable custom Dart lint rules, shared across my projects. Areas and
   enabled rules come from a per-repo YAML file, so the same rule set serves an
   app and a pure-Dart library without either inheriting the other's house rules.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/kai-tw/dart-packages/tree/main/packages/dart_lints
 
 environment:
@@ -12,14 +12,22 @@ environment:
 resolution: workspace
 
 dependencies:
-  # Pinned to the 10.x line by THREE independent constraints — do not lift any
-  # one of them in isolation:
-  #   1. This package. analyzer 12.0.0 removed ClassDeclaration.name/.members,
-  #      which 8 rule files use directly.
-  #   2. The consuming app's codegen stack. build / freezed / json_serializable
-  #      / source_gen / build_runner all declare analyzer <11.0.0.
-  #   3. dart_style 3.1.7 declares analyzer >=10.0.0 <12.0.0.
-  analyzer: ">=10.0.0 <11.0.0"
+  # The UPPER bound is this package's own: analyzer 12.0.0 removed
+  # ClassDeclaration.name/.members, which 8 rule files use directly. They have
+  # tests, so lifting it fails loudly rather than silently changing behaviour.
+  #
+  # The LOWER bound is as wide as the rules actually work, which is what lets a
+  # consumer's own resolution decide. It matters: riverpod_generator skips the
+  # 10/11 line entirely (<=4.0.3 wants ^9, 4.0.4-dev.1+ wants ^12, 4.0.6+ wants
+  # ^13), so a >=10 floor makes this package uninstallable in any Riverpod app.
+  # Verified at 9.0.0 — 131 tests plus an end-to-end run whose resolved-AST
+  # rules fired correctly.
+  #
+  # Do NOT copy a consuming repo's lockfile numbers in here. The previous
+  # comment cited dart_style's range as a third constraint; dart_style is not a
+  # dependency of this package, so that was an observation about one app's
+  # lockfile written down as if it bound the package.
+  analyzer: ">=9.0.0 <11.0.0"
   glob: ^2.1.0
   path: ^1.9.0
   yaml: ^3.1.0
