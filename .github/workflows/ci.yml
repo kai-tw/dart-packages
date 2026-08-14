@@ -26,7 +26,15 @@ jobs:
 
       - run: dart format --output=none --set-exit-if-changed .
 
-      - run: dart analyze --fatal-infos
+      # One entry point, so the stock analyzer and the custom rules cannot
+      # disagree about scope. dart_lints runs `dart analyze --fatal-infos`
+      # itself — the flags live in dart_lints.yaml, where dropping one is a
+      # visible diff rather than a silent weakening (linter diagnostics are
+      # INFO severity, so without --fatal-infos they print and still exit 0).
+      - run: dart run dart_lints
+
+      - run: dart test
+        working-directory: packages/dart_lints
 
       - run: dart test
         working-directory: packages/hlc_sync

@@ -2,13 +2,23 @@ import 'package:flutter/material.dart';
 
 /// The standard confirm-then-delete dialog: a destructive action gated by a
 /// confirmation, with the delete button itself managing [onDelete]'s async
-/// lifecycle — a spinner while it runs, and on failure the dialog stays
-/// open with the error shown inline rather than closing silently.
+/// lifecycle — a spinner while it runs, and on failure the dialog stays open
+/// with its buttons live again so the caller can decide what to show.
+///
+/// **Handle failure INSIDE `onDelete`. There is no outer place to catch it.**
+///
+/// The dialog does not catch — it knows nothing about an arbitrary callback's
+/// exception types, so the only report it could produce was `toString()` in a
+/// text field, away from the error handling that knows what failed. But the
+/// escape route is not what it looks like: the delete button invokes `onDelete`
+/// fire-and-forget, and `show` returns the *dialog route's* future, not the
+/// callback's. So a `try` around `show` compiles, raises no lint, and catches
+/// nothing — the exception becomes an unhandled async error and reaches the
+/// zone handler, which in most apps means it is logged and the user is told
+/// nothing.
 ///
 /// All copy (`title`, `content`, `cancelLabel`, `deleteLabel`) is required —
-/// see the package README §Text ownership. [onError] is an optional hook
-/// for logging/telemetry only; [errorMessageBuilder] controls what the user
-/// sees (defaults to `error.toString()`).
+/// see the package README §Text ownership.
 ///
 /// [confirmPhrase], if set, gates the delete button behind a text field that
 /// must match it exactly — for actions destructive enough that a second tap
@@ -24,8 +34,6 @@ class CommonDeleteDialog extends StatefulWidget {
     required this.deleteLabel,
     this.deleteIcon = Icons.delete_rounded,
     required this.onDelete,
-    this.errorMessageBuilder,
-    this.onError,
     this.confirmPhrase,
     this.confirmFieldHint,
   }) : assert(
@@ -39,8 +47,6 @@ class CommonDeleteDialog extends StatefulWidget {
   final String deleteLabel;
   final IconData deleteIcon;
   final Future<void> Function() onDelete;
-  final String Function(Object error)? errorMessageBuilder;
-  final void Function(Object error, StackTrace stackTrace)? onError;
   final String? confirmPhrase;
   final String? confirmFieldHint;
 
@@ -55,8 +61,6 @@ class CommonDeleteDialog extends StatefulWidget {
     required String deleteLabel,
     IconData deleteIcon = Icons.delete_rounded,
     required Future<void> Function() onDelete,
-    String Function(Object error)? errorMessageBuilder,
-    void Function(Object error, StackTrace stackTrace)? onError,
     String? confirmPhrase,
     String? confirmFieldHint,
   }) {
@@ -70,8 +74,6 @@ class CommonDeleteDialog extends StatefulWidget {
         deleteLabel: deleteLabel,
         deleteIcon: deleteIcon,
         onDelete: onDelete,
-        errorMessageBuilder: errorMessageBuilder,
-        onError: onError,
         confirmPhrase: confirmPhrase,
         confirmFieldHint: confirmFieldHint,
       ),
@@ -81,7 +83,6 @@ class CommonDeleteDialog extends StatefulWidget {
 
 class _CommonDeleteDialogState extends State<CommonDeleteDialog> {
   bool _isLoading = false;
-  String? _errorMessage;
   final TextEditingController _confirmController = TextEditingController();
 
   @override
@@ -128,13 +129,6 @@ class _CommonDeleteDialogState extends State<CommonDeleteDialog> {
                 ),
               ),
             ],
-            if (_errorMessage != null) ...<Widget>[
-              const SizedBox(height: 12.0),
-              Text(
-                _errorMessage!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
           ],
         ),
         actions: <Widget>[
@@ -166,22 +160,32 @@ class _CommonDeleteDialogState extends State<CommonDeleteDialog> {
   Future<void> _onDelete() async {
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
     });
 
+    // No catch: this dialog cannot say anything useful about an arbitrary
+    // callback's exception, and catching one here only moved the report away
+    // from the handler that knows what failed, into a text field rendering
+    // toString().
+    //
+    // Where the exception actually goes: onPressed invokes this method
+    // fire-and-forget, so nothing awaits the future it returns. The exception
+    // escapes to the zone handler — NOT to whoever called `show`, whose future
+    // belongs to the dialog route. That is why the contract is "handle it
+    // inside onDelete": there is no outer frame that could.
+    //
+    // The finally is not a catch: it lets the failure past untouched and only
+    // clears the loading state, so the dialog does not wedge on a spinner with
+    // its buttons disabled.
     try {
       await widget.onDelete();
 
       if (mounted) {
         Navigator.of(context).pop();
       }
-    } catch (e, s) {
-      widget.onError?.call(e, s);
-
+    } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = widget.errorMessageBuilder?.call(e) ?? e.toString();
         });
       }
     }

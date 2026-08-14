@@ -8,6 +8,13 @@ environment:
   sdk: ^3.8.0
 
 workspace:
+  - packages/dart_lints
   - packages/hlc_sync
   - packages/log_system
   - packages/ui_kit
+
+# Lets `dart run dart_lints` work from the repo root, so the lint entry point is
+# the same here as in a consuming app.
+dev_dependencies:
+  dart_lints:
+    path: packages/dart_lints

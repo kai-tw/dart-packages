@@ -1,0 +1,44 @@
+# Lint configuration for this workspace. Read by `dart run dart_lints`, which
+# runs the stock analyzer and the custom rules over the same paths so there is
+# one entry point rather than two that can disagree about scope.
+
+analyzer:
+  command: dart
+  # --fatal-infos is load-bearing, not decoration: linter diagnostics are INFO
+  # severity, so without it the 71 rules in analysis_options.yaml print and the
+  # command still exits 0.
+  args: [--fatal-infos]
+
+exclude:
+  - "**/*.freezed.dart"
+  - "**/*.g.dart"
+
+# Every Dart file must belong to an area or be listed here; anything else is a
+# configuration error rather than a region that silently goes unlinted.
+coverageIgnore: []
+
+# No bloc or getit: nothing here uses either, and enabling a bundle whose types
+# a codebase never mentions buys nothing but a slower run.
+bundles: [core, flutter]
+
+areas:
+  production:
+    paths:
+      - "packages/*/lib/**"
+      - "packages/*/bin/**"
+  test:
+    paths:
+      - "packages/*/test/**"
+    disable:
+      # Test-local decision tables and capture tuples are not DTOs.
+      - avoid_record_types
+      # Swallowing an engine exception and asserting via a verify() call is the
+      # real assertion; the empty arm is deliberate.
+      - avoid_empty_catch
+      - avoid_catching_base_exception
+
+options:
+  avoid_top_level_identifiers:
+    # These packages are published libraries: their top-level declarations are
+    # the public API, not stray globals. The rule's premise does not hold here.
+    scope: library
