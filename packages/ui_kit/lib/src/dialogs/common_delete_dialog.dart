@@ -5,10 +5,17 @@ import 'package:flutter/material.dart';
 /// lifecycle — a spinner while it runs, and on failure the dialog stays open
 /// with its buttons live again so the caller can decide what to show.
 ///
-/// A failure in `onDelete` propagates to the caller rather than being caught
-/// here: this dialog knows nothing about an arbitrary callback's exception
-/// types, so the only report it could produce was `toString()` in a text field,
-/// away from the caller's own error handling where the type is known.
+/// **Handle failure INSIDE `onDelete`. There is no outer place to catch it.**
+///
+/// The dialog does not catch — it knows nothing about an arbitrary callback's
+/// exception types, so the only report it could produce was `toString()` in a
+/// text field, away from the error handling that knows what failed. But the
+/// escape route is not what it looks like: the delete button invokes `onDelete`
+/// fire-and-forget, and `show` returns the *dialog route's* future, not the
+/// callback's. So a `try` around `show` compiles, raises no lint, and catches
+/// nothing — the exception becomes an unhandled async error and reaches the
+/// zone handler, which in most apps means it is logged and the user is told
+/// nothing.
 ///
 /// All copy (`title`, `content`, `cancelLabel`, `deleteLabel`) is required —
 /// see the package README §Text ownership.
@@ -155,10 +162,16 @@ class _CommonDeleteDialogState extends State<CommonDeleteDialog> {
       _isLoading = true;
     });
 
-    // A failure in the caller's onDelete propagates to the caller. This dialog
-    // cannot say anything useful about an arbitrary callback's exception, and
-    // catching one here only moved the report from the caller's error handling
-    // — where the type is known — into a text field that renders toString().
+    // No catch: this dialog cannot say anything useful about an arbitrary
+    // callback's exception, and catching one here only moved the report away
+    // from the handler that knows what failed, into a text field rendering
+    // toString().
+    //
+    // Where the exception actually goes: onPressed invokes this method
+    // fire-and-forget, so nothing awaits the future it returns. The exception
+    // escapes to the zone handler — NOT to whoever called `show`, whose future
+    // belongs to the dialog route. That is why the contract is "handle it
+    // inside onDelete": there is no outer frame that could.
     //
     // The finally is not a catch: it lets the failure past untouched and only
     // clears the loading state, so the dialog does not wedge on a spinner with
