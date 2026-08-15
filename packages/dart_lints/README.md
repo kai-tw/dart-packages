@@ -59,14 +59,20 @@ pure-Dart library without either inheriting the other's assumptions.
 |---|---|---|
 | `core` | 16 | nothing but Dart |
 | `flutter` | 8 | Flutter / Material types |
-| `clean_arch` | 5 | a layered directory layout |
+| `clean_arch` | 6 | a layered directory layout |
 | `bloc` | 6 | `Cubit` / `BlocBase` |
 | `getit` | 2 | a service locator |
 | `log_system` | 2 | the `log_system` package |
-| `novelglide` | 5 | one specific application — **do not enable elsewhere** |
+| `novelglide` | 4 | one specific application — **do not enable elsewhere** |
 
 A Riverpod project enables neither `bloc` nor `getit`: those rules resolve types
 it does not have, so they are dead weight rather than silent gaps.
+
+⚠️ `avoid_shared_preferences_outside_owner` reports **every**
+`shared_preferences` import until its `ownerPaths` is set, so a repository
+enabling `clean_arch` configures that option or disables the rule in an area.
+The silent alternative — unconfigured means allow everything — would let the
+rule pass while inert.
 
 ### Validation fails closed
 
