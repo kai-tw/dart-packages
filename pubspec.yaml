@@ -11,6 +11,7 @@ workspace:
   - packages/dart_lints
   - packages/hlc_sync
   - packages/log_system
+  - packages/preference_store
   - packages/ui_kit
 
 # Lets `dart run dart_lints` work from the repo root, so the lint entry point is
