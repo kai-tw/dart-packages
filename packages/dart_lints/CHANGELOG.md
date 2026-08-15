@@ -30,6 +30,13 @@
         - lib/main.dart
   ```
 
+  Those four are the old rule's own list, and they still hold: at NovelGlide's
+  `main` (`5b6c472a`) every Dart file importing the package sits under one of
+  them — `core/setup_dependencies.dart`, four files in
+  `features/migration/processes/`, and `features/preference/setup_dependencies.dart`.
+  `lib/main.dart` no longer imports it at all, and is listed only for fidelity
+  to what the rule used to allow.
+
   ⚠️ **This reaches every repository that enables `clean_arch`, not only the one
   that used the old rule.** `ownerPaths` defaults to empty, and empty means no
   file is an owner — so every `shared_preferences` import is reported until the
