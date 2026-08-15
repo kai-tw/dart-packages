@@ -43,19 +43,26 @@ abstract class PreferenceRepository<T> {
 
 The contract every feature-level preference repository implements. This
 package ships the interface only — each domain's `getPreference` /
-`savePreference` (how `T` maps to primitives) is app-specific and lives in
-the app.
+`savePreference` (how `T` maps to primitives), and how instances get
+composed and handed to consumers, is app-specific and lives in the app.
+Nothing here assumes `get_it` or any other DI framework — a constructor
+call, a Riverpod provider, and a `get_it` registration all work the same
+way against this interface.
 
-A `typedef` per domain is how NovelGlide turns the shared generic type into
-a distinct, named DI key:
+One convention worth naming, since it isn't obvious from the type alone:
+a `typedef` per domain turns the shared generic type into a distinct
+name:
 
 ```dart
 typedef ReaderPreferenceRepository = PreferenceRepository<ReaderPreferenceData>;
 ```
 
-`sl<ReaderPreferenceRepository>()` and `sl<TtsPreferenceRepository>()`
-resolve to different singletons even though both extend the same generic
-base — the typedef, not the base class, is what a service locator keys on.
+That is what lets a service locator keyed on static type — `get_it` is
+one, not the only one — tell `ReaderPreferenceRepository` and
+`TtsPreferenceRepository` apart even though both extend the same generic
+base. An app wiring this by hand (or through a different DI approach
+entirely) has no need for the typedef; it exists for the "distinct
+named type" use case, not as part of this package's contract.
 
 ### `PreferenceLocalDataSource<K>` / `PreferenceLocalDataSourceImpl<K>`
 
