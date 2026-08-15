@@ -8,6 +8,7 @@ import 'rules/bloc/require_cubit_suffix.dart';
 import 'rules/bloc/state_provides_copywith.dart';
 import 'rules/clean_arch/avoid_freezed_in_domain.dart';
 import 'rules/clean_arch/avoid_layer_violation.dart';
+import 'rules/clean_arch/avoid_shared_preferences_outside_owner.dart';
 import 'rules/clean_arch/avoid_tool_imports_in_lib.dart';
 import 'rules/clean_arch/domain_exception_extends_app_exception.dart';
 import 'rules/clean_arch/domain_pure_dart_imports.dart';
@@ -41,7 +42,6 @@ import 'rules/log_system/avoid_unsafe_log_interpolation.dart';
 import 'rules/log_system/log_error_requires_stacktrace.dart';
 import 'rules/novelglide/novelglide_analytics_param_namespace.dart';
 import 'rules/novelglide/novelglide_avoid_harness_support_imports_in_lib.dart';
-import 'rules/novelglide/novelglide_avoid_shared_preferences_outside_preference.dart';
 import 'rules/novelglide/novelglide_prefer_loadingstatecode_over_bool.dart';
 import 'rules/novelglide/novelglide_require_design_mockup_guard.dart';
 
@@ -246,6 +246,14 @@ class RuleRegistry {
       ),
     ),
     RuleDescriptor(
+      name: 'avoid_shared_preferences_outside_owner',
+      bundle: 'clean_arch',
+      options: <String, OptionKind>{'ownerPaths': OptionKind.stringList},
+      create: (Map<String, Object?> o) => AvoidSharedPreferencesOutsideOwner(
+        ownerPaths: o['ownerPaths'] as List<String>?,
+      ),
+    ),
+    RuleDescriptor(
       name: 'avoid_tool_imports_in_lib',
       bundle: 'clean_arch',
       options: <String, OptionKind>{
@@ -403,12 +411,6 @@ class RuleRegistry {
       bundle: 'novelglide',
       create: (Map<String, Object?> o) =>
           NovelglideAvoidHarnessSupportImportsInLib(),
-    ),
-    RuleDescriptor(
-      name: 'novelglide_avoid_shared_preferences_outside_preference',
-      bundle: 'novelglide',
-      create: (Map<String, Object?> o) =>
-          NovelglideAvoidSharedPreferencesOutsidePreference(),
     ),
     RuleDescriptor(
       name: 'novelglide_prefer_loadingstatecode_over_bool',
