@@ -39,6 +39,11 @@ jobs:
       - run: dart test
         working-directory: packages/hlc_sync
 
+      # `flutter test`, not `dart test`: ui_kit's tests import `flutter_test`,
+      # which the bare Dart test runner cannot load.
+      - run: flutter test
+        working-directory: packages/ui_kit
+
       # Catches pub.dev's own complaints (missing example, bad description
       # length, unresolvable doc links) before a release rather than during one.
       - run: dart pub publish --dry-run

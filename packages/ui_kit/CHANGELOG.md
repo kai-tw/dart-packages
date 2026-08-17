@@ -1,3 +1,37 @@
+## 2.1.0
+- `CommonInfoWidget` caps its content column at a new optional
+  `maxContentWidth` (default `CommonInfoWidget.defaultMaxContentWidth`, 480).
+  Neither the title nor the caption was bounded before, so a caption on a
+  1024px tablet spanned the whole window. The cap covers the icon, title,
+  caption and the actions `Wrap` together, and `CommonErrorWidget` /
+  `CommonErrorSliverWidget` inherit it through composition.
+
+  Pass an explicit value where the surrounding page caps its own content
+  differently — a placeholder that *replaces* that content should not render
+  narrower than what it replaced.
+
+- `CommonInfoWidget`'s **dense** variant gains 16px horizontal padding. It
+  previously had none at all, so its text could sit flush against the host's
+  edge.
+
+  This does **not** make dense narrower than the default variant, and cannot:
+  at a container width `W` the dense content is `min(cap, W - 32)` against the
+  default's `min(cap, W - 48)`, so below `cap + 32` dense stays the wider of
+  the two. The two variants never share a container in practice — the default
+  is full-screen, dense sits inside a section that already carries its own
+  inset — so the comparison is not the thing being fixed. Being flush is.
+
+  **Adopters:** a dense call site that already compensated with its own
+  horizontal inset now gets both. Check inline cards and dialogs with a tight
+  measure; the padding is deliberately not a parameter, so compensate at the
+  call site or give the host more room.
+
+- ui_kit gains a `test/` directory and a `flutter_test` dev-dependency; CI runs
+  `flutter test` for it. It was the only package in this workspace with no
+  tests. (`flutter_test` cannot be added on any 1.x branch — `hlc_sync` pinned
+  `test: ^1.31.2` there, which makes the whole workspace unresolvable once a
+  Flutter package with tests joins it. That floor was widened on `main` only.)
+
 ## 2.0.0
 - **BREAKING** — `CommonDeleteDialog` (and its `.show` helper) drops
   `errorMessageBuilder` and `onError`. A failure in `onDelete` now propagates to
