@@ -6,7 +6,7 @@ never disagree about a dependency version.
 
 | Package | |
 |---|---|
-| [`hlc_sync`](packages/hlc_sync) | Field-level, last-writer-wins sync over any passive blob store, ordered by hybrid logical clocks. |
+| [`hlc`](packages/hlc) | Hybrid logical clocks — timestamps two devices order the same way without agreeing on a wall clock. |
 | [`ui_kit`](packages/ui_kit) | A UI kit that shares Flutter components through my projects. |
 
 ## Working on it
@@ -27,6 +27,6 @@ enough that neither app's framework leaks across. Two rules follow from that:
   package runs on servers, in CLIs and in tests without a device. Adding
   `flutter` is not reversible without a breaking change, so it is not added to
   make a name look consistent.
-- **The binding stays in the app.** `hlc_sync` defines a `MirrorStore`; the
-  drift implementation of it lives in the app that uses drift. What is shared is
-  the algorithm, not the storage.
+- **The binding stays in the app.** `hlc` hands back a stamp map encoded as one
+  JSON string; which column holds it, and which record types have one, is the
+  app's. What is shared is the algorithm, not the storage.

@@ -14,7 +14,7 @@ jobs:
       # Flutter SDK, not bare Dart: ui_kit depends on `flutter: sdk:
       # flutter`, which plain dart-lang/setup-dart can't resolve. Its bundled
       # Dart (3.12.0) matches the version this used to pin directly, so
-      # hlc_sync's resolution and tests are unaffected.
+      # hlc's resolution and tests are unaffected.
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
@@ -37,7 +37,7 @@ jobs:
         working-directory: packages/dart_lints
 
       - run: dart test
-        working-directory: packages/hlc_sync
+        working-directory: packages/hlc
 
       # `flutter test`, not `dart test`: ui_kit's tests import `flutter_test`,
       # which the bare Dart test runner cannot load.
@@ -47,7 +47,7 @@ jobs:
       # Catches pub.dev's own complaints (missing example, bad description
       # length, unresolvable doc links) before a release rather than during one.
       - run: dart pub publish --dry-run
-        working-directory: packages/hlc_sync
+        working-directory: packages/hlc
 
       # ui_kit is intentionally not published (git dependency only — see its
       # README §Status), so no publish dry-run step for it.
