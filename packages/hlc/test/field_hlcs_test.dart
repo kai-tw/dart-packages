@@ -1,4 +1,4 @@
-import 'package:hlc_sync/hlc_sync.dart';
+import 'package:hlc/hlc.dart';
 import 'package:test/test.dart';
 
 void main() {

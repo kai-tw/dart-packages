@@ -1,9 +1,9 @@
-name: hlc_sync
+name: hlc
 description: >-
-  Field-level, last-writer-wins sync over any passive blob store, ordered by
-  hybrid logical clocks. No server, no live peers, no code generation.
+  Hybrid logical clocks — timestamps two devices order the same way without
+  agreeing on a wall clock. Ordering only: no transport, no merge engine.
 version: 0.1.0
-repository: https://github.com/kai-tw/dart-packages/tree/main/packages/hlc_sync
+repository: https://github.com/kai-tw/dart-packages/tree/main/packages/hlc
 issue_tracker: https://github.com/kai-tw/dart-packages/issues
 
 environment:
@@ -21,6 +21,6 @@ dev_dependencies:
   # to whatever the installed SDK ships — 1.31.2 wants a newer `test_api` than
   # that, so pinning the floor here makes the whole workspace unresolvable the
   # moment a Flutter package with tests joins it. Runtime is unaffected; this
-  # package has no Flutter dependency and none of its 87 tests use an API
-  # newer than 1.25.
+  # package has no Flutter dependency and none of its tests use an API newer
+  # than 1.25.
   test: ">=1.25.0 <2.0.0"

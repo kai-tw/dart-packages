@@ -9,7 +9,7 @@ environment:
 
 workspace:
   - packages/dart_lints
-  - packages/hlc_sync
+  - packages/hlc
   - packages/log_system
   - packages/preference_store
   - packages/ui_kit
