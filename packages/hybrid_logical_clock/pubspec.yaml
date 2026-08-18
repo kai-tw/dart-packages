@@ -1,9 +1,9 @@
-name: hlc
+name: hybrid_logical_clock
 description: >-
   Hybrid logical clocks — timestamps two devices order the same way without
   agreeing on a wall clock. Ordering only: no transport, no merge engine.
 version: 0.1.0
-repository: https://github.com/kai-tw/dart-packages/tree/main/packages/hlc
+repository: https://github.com/kai-tw/dart-packages/tree/main/packages/hybrid_logical_clock
 issue_tracker: https://github.com/kai-tw/dart-packages/issues
 
 environment:

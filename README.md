@@ -6,7 +6,7 @@ never disagree about a dependency version.
 
 | Package | |
 |---|---|
-| [`hlc`](packages/hlc) | Hybrid logical clocks — timestamps two devices order the same way without agreeing on a wall clock. |
+| [`hybrid_logical_clock`](packages/hybrid_logical_clock) | Timestamps two devices order the same way without agreeing on a wall clock. |
 | [`ui_kit`](packages/ui_kit) | A UI kit that shares Flutter components through my projects. |
 
 ## Working on it
@@ -27,6 +27,6 @@ enough that neither app's framework leaks across. Two rules follow from that:
   package runs on servers, in CLIs and in tests without a device. Adding
   `flutter` is not reversible without a breaking change, so it is not added to
   make a name look consistent.
-- **The binding stays in the app.** `hlc` hands back a stamp map encoded as one
-  JSON string; which column holds it, and which record types have one, is the
-  app's. What is shared is the algorithm, not the storage.
+- **The binding stays in the app.** `hybrid_logical_clock` hands back a stamp
+  map encoded as one JSON string; which column holds it, and which record types
+  have one, is the app's. What is shared is the algorithm, not the storage.

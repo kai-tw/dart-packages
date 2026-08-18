@@ -23,7 +23,7 @@
 library;
 
 export 'src/errors.dart';
-export 'src/hlc/field_hlcs.dart';
-export 'src/hlc/hlc.dart';
-export 'src/hlc/hlc_clock.dart';
-export 'src/hlc/hlc_dto.dart';
+export 'src/field_hlcs.dart';
+export 'src/hlc.dart';
+export 'src/hlc_clock.dart';
+export 'src/hlc_dto.dart';

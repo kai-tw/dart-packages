@@ -1,4 +1,4 @@
-# hlc
+# hybrid_logical_clock
 
 Hybrid logical clocks — timestamps two devices order the same way without
 agreeing on a wall clock.

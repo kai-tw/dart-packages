@@ -1,4 +1,4 @@
-import '../errors.dart';
+import 'errors.dart';
 
 /// Hybrid Logical Clock value type.
 ///
