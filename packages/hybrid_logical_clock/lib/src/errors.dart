@@ -1,9 +1,9 @@
 /// Raised when an HLC string cannot be decoded.
 ///
 /// The message deliberately carries only positions and lengths, never the
-/// input itself: HLC strings arrive from cloud storage, so they are
-/// attacker-influenced, and interpolating one into a logged message would
-/// round-trip those bytes into Crashlytics.
+/// input itself: HLC strings arrive from storage the app does not control, so
+/// they are attacker-influenced, and interpolating one into a logged message
+/// would round-trip those bytes into whatever crash reporter is attached.
 class HlcDecodeException implements Exception {
   const HlcDecodeException(this.message);
 
@@ -24,15 +24,4 @@ class HlcCorruptedException implements Exception {
 
   @override
   String toString() => 'HlcCorruptedException: $message';
-}
-
-/// Raised by [Mutex] when the mutex has been disposed.
-///
-/// Callers awaiting `lock()` get this rather than hanging forever when the
-/// owner shuts down mid-wait.
-class MutexDisposedException implements Exception {
-  const MutexDisposedException();
-
-  @override
-  String toString() => 'MutexDisposedException';
 }

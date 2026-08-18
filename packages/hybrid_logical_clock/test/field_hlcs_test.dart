@@ -1,4 +1,4 @@
-import 'package:hlc_sync/hlc_sync.dart';
+import 'package:hybrid_logical_clock/hybrid_logical_clock.dart';
 import 'package:test/test.dart';
 
 void main() {

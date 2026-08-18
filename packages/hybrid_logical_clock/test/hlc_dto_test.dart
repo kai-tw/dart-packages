@@ -1,5 +1,5 @@
 import 'package:clock/clock.dart';
-import 'package:hlc_sync/hlc_sync.dart';
+import 'package:hybrid_logical_clock/hybrid_logical_clock.dart';
 import 'package:test/test.dart';
 
 /// [HlcDto] is hand-written rather than generated, so the wire format is not
