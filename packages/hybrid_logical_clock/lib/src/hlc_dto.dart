@@ -41,11 +41,6 @@ class HlcDto {
   final int logical;
   final String nodeId;
 
-  /// Tolerance ceiling for [physicalMs] over the reader's wall clock.
-  /// Covers ordinary cross-device skew plus a manually advanced clock;
-  /// beyond this the value is forged or corrupt.
-  static const int _physicalMsFutureSkewCeilingMs = 24 * 60 * 60 * 1000;
-
   /// Hard cap on [logical]. The clock resets it to 0 whenever `physicalMs`
   /// advances, so reaching this would need millions of ticks inside a single
   /// wall-clock millisecond.
@@ -72,7 +67,7 @@ class HlcDto {
   /// left out for the same reason [Hlc.decode] omits its input.
   Hlc toDomain() {
     final int nowMs = clock.now().millisecondsSinceEpoch;
-    if (physicalMs > nowMs + _physicalMsFutureSkewCeilingMs) {
+    if (physicalMs > nowMs + Hlc.futureSkewCeilingMs) {
       throw HlcCorruptedException(
         'HlcDto.toDomain: physicalMs exceeds clock-now + 24h '
         '(nowMs=$nowMs, physicalMs=$physicalMs)',
