@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.2.1
+
+Tests only — no API or behaviour change.
+
+The first consuming app had been carrying a deeper suite over `Hlc`,
+`HlcClock` and `HlcDto` than this package had for the same types: 48 cases to
+34, built up while the code still lived in that app. Consolidating the code
+here without the tests would have quietly traded that coverage away, so the
+cases this package lacked are now here, where they protect every consumer
+rather than one app.
+
+- **`test/hlc_clock_test.dart`** (new) — `receive`'s four rules as an explicit
+  decision table (W / L / R / tie), plus tick monotonicity, the
+  same-millisecond burst, and two invariants worth stating on their own: a
+  received remote never pollutes the stamped `nodeId`, and the next tick after
+  a receive outranks what was received. The three clock smoke tests in
+  `hlc_test.dart` are superseded and removed.
+- **Ordering** — each axis pinned separately rather than as one chain, so a
+  comparator reading the wrong field fails on the axis it broke; both
+  directions asserted, since a constant-sign comparator satisfies
+  one-directional checks; and `physicalMs: 0` pinned as a real value, which is
+  what a migrated pre-HLC row carries.
+- **Codec** — a mutation pin that `decode` splits on only the first two
+  delimiters (a greedy split truncates every UUID node id, and does it
+  silently), plus round-trips for the legacy sentinel, zero components, and a
+  node id with no dashes at all.
+- **`HlcDto` gates** — the accept side of both boundaries (`physicalMs`
+  exactly at the ceiling, `logical` exactly at the cap), which is what pins
+  `>` against `>=`; and that a reject message names the offending numeric
+  field, since that message is the only diagnostic a corrupt row leaves.
+- **`fromLegacyWallClock`** — sentinel and zero-logical stamping, and the
+  epoch surviving as `physicalMs: 0`.
+
+One ported case was corrected rather than copied: it was titled as
+`receive` N-remote *idempotence*, but its own comment conceded that arrival
+order changes the logical bump, and it only ever asserted `physicalMs`. It now
+states the guarantee that actually holds — the physical component converges
+and the result outranks both remotes.
+
+55 tests, up from 34.
+
 ## 0.2.0
 
 `Hlc.fromUntrustedWallClock` — the gated sibling of `fromLegacyWallClock`, for
