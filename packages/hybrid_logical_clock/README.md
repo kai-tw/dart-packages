@@ -46,13 +46,27 @@ edit rather than winning by accident.
 ## Clock skew is treated as hostile
 
 `HlcDto` is the trust boundary for a stamp read back out of storage the app does
-not control. `toDomain()` rejects any timestamp more than 24 hours ahead of the
-reader's wall clock, and any logical counter above 2^20.
+not control. `toDomain()` rejects any timestamp more than `Hlc.futureSkewCeilingMs`
+(24 hours) ahead of the reader's wall clock, and any logical counter above 2^20.
 
 It rejects rather than clamps. A stamp far in the future wins every comparison
 forever, and clamping accepts the forged ordering quietly. Anything that can
 write to shared storage can write such a value — including one of the user's own
 devices with a wrong clock.
+
+**Two entry points, one ceiling.** A stamp can also enter without the HLC fields
+being present at all: a backward-compat read that finds only a plain `createdAt`
+and seeds from that. `toDomain()` never runs on this path, so
+`Hlc.fromUntrustedWallClock` applies the same ceiling — otherwise the gate is
+bypassed by simply not writing the fields it guards. Its ungated sibling
+`Hlc.fromLegacyWallClock` is for timestamps the device produced itself
+(migration times, receive times), where there is no trust boundary to police.
+Pick by where the `DateTime` came from, not by what it looks like.
+
+The ceiling is a **bound, not an authentication**. It cannot stop a forged
+`now + 23h`. What it removes is the unbounded case: `compareTo` orders on
+`physicalMs` first, so an uncapped far-future stamp outranks every real write
+*permanently*, turning one bad row into a record that can never be corrected.
 
 Decode errors carry only positions and lengths, never the input: these strings
 are attacker-influenced, and interpolating one into a log message round-trips

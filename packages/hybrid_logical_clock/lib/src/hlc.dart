@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+
 import 'errors.dart';
 
 /// Hybrid Logical Clock value type.
@@ -25,14 +27,46 @@ class Hlc implements Comparable<Hlc> {
     required this.nodeId,
   });
 
-  /// Seed an HLC from a pre-HLC wall-clock-only timestamp. Used by
-  /// DTO `fromJson` backward-compat reads when the persisted shape
-  /// does not yet carry HLC fields.
+  /// Seed an HLC from a pre-HLC wall-clock-only timestamp **this device
+  /// produced** — a receive time, a migration time, any locally-read
+  /// anchor for records that have no HLC of their own.
+  ///
+  /// Unvalidated by design: the input is the local clock, so there is no
+  /// trust boundary to police, and a gate keyed on `clock.now()` would only
+  /// compare that clock against itself. For a timestamp that came out of
+  /// bytes, use [Hlc.fromUntrustedWallClock] instead — the two are told
+  /// apart only by where the caller got the `DateTime`.
   factory Hlc.fromLegacyWallClock(DateTime wallClock) => Hlc(
     physicalMs: wallClock.millisecondsSinceEpoch,
     logical: 0,
     nodeId: legacyNodeId,
   );
+
+  /// Seed an HLC from a wall-clock timestamp that came **out of bytes** —
+  /// a DTO's backward-compat fallback when the HLC fields are absent from
+  /// the stored shape and only a plain timestamp is there to seed from.
+  ///
+  /// Applies the same [futureSkewCeilingMs] gate [HlcDto.toDomain] does,
+  /// because this is the **other** way an [Hlc] gets built from untrusted
+  /// bytes: omit the HLC fields entirely and let the plain timestamp seed
+  /// it. Without this, the ceiling on the HLC fields is bypassed by simply
+  /// not writing them — a stored `createdAt` of `+275760-09-13` parses
+  /// cleanly into a stamp that outranks every later write forever.
+  ///
+  /// Like [HlcDto.toDomain] this rejects rather than clamps, and throws
+  /// [HlcCorruptedException]. A caller that cannot afford to abort a whole
+  /// batch should catch per record and skip that one.
+  factory Hlc.fromUntrustedWallClock(DateTime wallClock) {
+    final int physicalMs = wallClock.millisecondsSinceEpoch;
+    final int nowMs = clock.now().millisecondsSinceEpoch;
+    if (physicalMs > nowMs + futureSkewCeilingMs) {
+      throw HlcCorruptedException(
+        'Hlc.fromUntrustedWallClock: wall clock exceeds clock-now + 24h '
+        '(nowMs=$nowMs, physicalMs=$physicalMs)',
+      );
+    }
+    return Hlc(physicalMs: physicalMs, logical: 0, nodeId: legacyNodeId);
+  }
 
   /// Decode the canonical string form `<physicalMs>-<logical>-<nodeId>`.
   /// nodeId may itself contain `-` (UUID v4 / legacy sentinel) so the
@@ -112,6 +146,22 @@ class Hlc implements Comparable<Hlc> {
   /// reverse-references at conflict-resolution sites can branch on
   /// the legacy case without duplicating the string literal.
   static const String legacyNodeId = '00000000-legacy-pre-hlc-write';
+
+  /// Tolerance ceiling for [physicalMs] over the reader's wall clock.
+  /// Accommodates ordinary cross-device skew plus a manually advanced
+  /// clock; beyond it the value is forged or corrupt.
+  ///
+  /// Lives on [Hlc] rather than on [HlcDto] because it must bound **every**
+  /// construction of an [Hlc] from untrusted bytes, and there are two:
+  /// [HlcDto.toDomain] and [Hlc.fromUntrustedWallClock]. A ceiling that
+  /// guards only one is a ceiling with a documented way around it.
+  ///
+  /// This is a **bound, not an authentication**. Anything able to write the
+  /// storage can still supply `now + 23h` and pass. What it removes is the
+  /// unbounded case: [compareTo] orders on [physicalMs] first, so an
+  /// uncapped far-future stamp outranks every real write *permanently*,
+  /// which turns one bad row into a record that can never be corrected.
+  static const int futureSkewCeilingMs = 24 * 60 * 60 * 1000;
 
   /// Canonical serialized form: `<physicalMs>-<logical>-<nodeId>`.
   String encode() => '$physicalMs-$logical-$nodeId';
