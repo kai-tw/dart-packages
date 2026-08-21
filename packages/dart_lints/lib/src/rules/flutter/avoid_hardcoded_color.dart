@@ -27,6 +27,13 @@ import '../../lint_rule_base.dart';
 /// color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
 /// ```
 ///
+/// A `Color` built from something the code did not write down is left alone —
+/// `Color(row.colour)`, `Color(int.parse(hex, radix: 16))`. The value comes
+/// from storage or from the user, so there is no theme role it could have used
+/// instead, and reporting it asks for a change that does not exist. Only a
+/// colour stated in the source is hardcoded, which is what the rule is named
+/// after.
+///
 /// Scoped by the `pathMarkers` option; unscoped by default.
 class AvoidHardcodedColor extends LintRule {
   AvoidHardcodedColor({List<String>? pathMarkers})
@@ -75,8 +82,9 @@ class _Visitor extends LintVisitor {
       final String typeName = node.constructorName.type.toSource();
       if (typeName == 'Color') {
         final String? namedConstructor = node.constructorName.name?.name;
-        if (namedConstructor == null ||
-            _flaggedConstructors.contains(namedConstructor)) {
+        if ((namedConstructor == null ||
+                _flaggedConstructors.contains(namedConstructor)) &&
+            _isWrittenDown(node.argumentList)) {
           report(
             ruleName: 'avoid_hardcoded_color',
             message:
@@ -89,6 +97,29 @@ class _Visitor extends LintVisitor {
     }
     super.visitInstanceCreationExpression(node);
   }
+
+  /// Whether the colour is stated in the source rather than computed.
+  ///
+  /// `Color(0xff112233)` says what the colour is; `Color(row.colour)` says
+  /// where one comes from. Only the first is hardcoded, and only the first has
+  /// a theme role it could have used instead.
+  ///
+  /// An expression built out of literals (`Color(base + 1)`) counts as
+  /// computed. That is the lenient direction on purpose: this rule cannot
+  /// evaluate arithmetic, and a false report is worse here than a miss —
+  /// the miss is a colour someone went out of their way to obscure, while the
+  /// false report has no fix at all.
+  static bool _isWrittenDown(ArgumentList arguments) =>
+      arguments.arguments.isNotEmpty && arguments.arguments.every(_isLiteral);
+
+  static bool _isLiteral(Expression expression) => switch (expression) {
+    Literal() => true,
+    // `-1`, and `(0xff)`.
+    PrefixExpression(operand: final Expression inner) ||
+    ParenthesizedExpression(expression: final Expression inner) ||
+    NamedExpression(expression: final Expression inner) => _isLiteral(inner),
+    _ => false,
+  };
 
   @override
   void visitPrefixedIdentifier(PrefixedIdentifier node) {

@@ -1,3 +1,55 @@
+## 0.2.1
+
+- `avoid_catching_abstract_exception` gains a `sanctionedBases` option: abstract
+  exception types this configuration accepts, by name.
+
+  Some libraries export only the abstract base and keep the concrete subclass in
+  an unexported `src/` — `sqflite`'s `DatabaseException` is one — which leaves a
+  consumer nothing narrower to name. Until now the only way through was to
+  disable the rule for the file, which also excused every other abstract catch
+  in it. Naming the type instead keeps the rest of the file governed.
+
+  Pair it with an area whose paths name the one boundary that needs it. Set
+  globally it excuses the type across the whole tree, which is a much weaker
+  claim than "this file has no alternative":
+
+  ```yaml
+  areas:
+    database_boundary:
+      paths: ["lib/core/database/app_database.dart"]
+      options:
+        avoid_catching_abstract_exception:
+          sanctionedBases: [DatabaseException]
+  ```
+
+  The rule also gains its first tests, covering the option and the two things
+  it must not do: sanctioning one base leaves its siblings reported, and a
+  typo in the list changes nothing in either direction.
+
+- `avoid_hardcoded_color` no longer reports a `Color` built from a value the
+  code did not write down — `Color(row.colour)`, `Color(int.parse(hex, radix:
+  16))`, `Color.fromARGB(alpha, 0, 0, 0)`. Only a colour stated in the source is
+  hardcoded, which is what the rule is named after and what every example in its
+  own documentation shows.
+
+  The rule matched on the constructor rather than on its arguments, so it also
+  caught the one shape that has no fix: a colour the user picked and the app
+  stored. `Theme.of(context).colorScheme.*` is not an alternative to reading a
+  value out of a database, and a consuming project could only silence it by
+  exempting the file — which then silences the real violations there too.
+
+  An argument list built out of literals but computed (`Color(base + 1)`) counts
+  as not-written-down. The rule cannot evaluate arithmetic, and the lenient
+  direction is the right one: the miss is a colour someone obscured on purpose,
+  while a false report names a fix that does not exist.
+
+  Expect the count to fall in any project that stores colours. `Colors.X` and
+  `.withOpacity()` are unaffected.
+
+- The rule gains a test. It had none, and the fixture has to be a **resolved**
+  unit — parsed, `Color(0xff112233)` is indistinguishable from a function call,
+  so a parse-only fixture reports nothing and passes whatever the rule does.
+
 ## 0.2.0
 
 - **Breaking.** `novelglide_avoid_shared_preferences_outside_preference` is
