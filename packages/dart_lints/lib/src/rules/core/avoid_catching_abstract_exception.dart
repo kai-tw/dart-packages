@@ -43,7 +43,28 @@ import '../../lint_rule_base.dart';
 /// Dart's built-in `Exception` and `Error` are flagged by sibling rules
 /// (`avoid_catching_base_exception`, `avoid_catching_error`) and skipped
 /// here to avoid duplicate reports.
+///
+/// Some libraries export only the abstract base and keep the concrete
+/// subclass in an unexported `src/`, which leaves a consumer nothing narrower
+/// to name. `sanctionedBases` is for those: it names the types this
+/// configuration accepts, so the boundary that has no alternative can be
+/// declared instead of the whole rule being switched off there. Everything
+/// else in the same file still reports.
 class AvoidCatchingAbstractException extends ResolvedLintRule {
+  AvoidCatchingAbstractException({List<String>? sanctionedBases})
+    : sanctionedBases = sanctionedBases ?? const <String>[];
+
+  /// Abstract exception types this configuration accepts, by name.
+  ///
+  /// Deliberately not scoped by the rule itself — pair it with an area whose
+  /// paths name the one boundary that needs it. A list here with the whole
+  /// tree as its scope excuses the type everywhere, which is a different and
+  /// much weaker claim than "this file has no alternative".
+  ///
+  /// Matched on the written name, which is what the report prints and what a
+  /// reader of the configuration can check against the source.
+  final List<String> sanctionedBases;
+
   @override
   String get name => 'avoid_catching_abstract_exception';
 
@@ -56,11 +77,13 @@ class AvoidCatchingAbstractException extends ResolvedLintRule {
   ResolvedLintVisitor createResolvedVisitor(
     String filePath,
     ResolvedUnitResult resolvedUnit,
-  ) => _Visitor(filePath, resolvedUnit);
+  ) => _Visitor(filePath, resolvedUnit, sanctionedBases);
 }
 
 class _Visitor extends ResolvedLintVisitor {
-  _Visitor(super.filePath, super.resolvedUnit);
+  _Visitor(super.filePath, super.resolvedUnit, this.sanctionedBases);
+
+  final List<String> sanctionedBases;
 
   /// Built-in base types covered by sibling rules — skip to avoid
   /// double-reporting.
@@ -77,7 +100,8 @@ class _Visitor extends ResolvedLintVisitor {
       return;
     }
     final String typeName = typeAnnotation.name.lexeme;
-    if (_siblingRuleNames.contains(typeName)) {
+    if (_siblingRuleNames.contains(typeName) ||
+        sanctionedBases.contains(typeName)) {
       super.visitCatchClause(node);
       return;
     }

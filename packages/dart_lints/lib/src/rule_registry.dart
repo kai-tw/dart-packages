@@ -68,7 +68,12 @@ class RuleRegistry {
     RuleDescriptor(
       name: 'avoid_catching_abstract_exception',
       bundle: 'core',
-      create: (Map<String, Object?> o) => AvoidCatchingAbstractException(),
+      options: <String, OptionKind>{
+        'sanctionedBases': OptionKind.stringList,
+      },
+      create: (Map<String, Object?> o) => AvoidCatchingAbstractException(
+        sanctionedBases: o['sanctionedBases'] as List<String>?,
+      ),
     ),
     RuleDescriptor(
       name: 'avoid_catching_base_exception',

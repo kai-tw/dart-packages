@@ -1,5 +1,31 @@
 ## 0.2.1
 
+- `avoid_catching_abstract_exception` gains a `sanctionedBases` option: abstract
+  exception types this configuration accepts, by name.
+
+  Some libraries export only the abstract base and keep the concrete subclass in
+  an unexported `src/` — `sqflite`'s `DatabaseException` is one — which leaves a
+  consumer nothing narrower to name. Until now the only way through was to
+  disable the rule for the file, which also excused every other abstract catch
+  in it. Naming the type instead keeps the rest of the file governed.
+
+  Pair it with an area whose paths name the one boundary that needs it. Set
+  globally it excuses the type across the whole tree, which is a much weaker
+  claim than "this file has no alternative":
+
+  ```yaml
+  areas:
+    database_boundary:
+      paths: ["lib/core/database/app_database.dart"]
+      options:
+        avoid_catching_abstract_exception:
+          sanctionedBases: [DatabaseException]
+  ```
+
+  The rule also gains its first tests, covering the option and the two things
+  it must not do: sanctioning one base leaves its siblings reported, and a
+  typo in the list changes nothing in either direction.
+
 - `avoid_hardcoded_color` no longer reports a `Color` built from a value the
   code did not write down — `Color(row.colour)`, `Color(int.parse(hex, radix:
   16))`, `Color.fromARGB(alpha, 0, 0, 0)`. Only a colour stated in the source is
