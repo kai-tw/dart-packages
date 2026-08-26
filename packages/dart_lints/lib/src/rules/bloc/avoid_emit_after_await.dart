@@ -8,7 +8,7 @@ import '../../lint_rule_base.dart';
 /// Detects `emit()` calls after `await` expressions in Cubit subclasses
 /// without an `isClosed` guard.
 ///
-/// ### Bad
+/// **Bad:**
 /// ```dart
 /// Future<void> load() async {
 ///   emit(Loading());
@@ -17,7 +17,7 @@ import '../../lint_rule_base.dart';
 /// }
 /// ```
 ///
-/// ### Good
+/// **Good:**
 /// ```dart
 /// Future<void> load() async {
 ///   emit(Loading());

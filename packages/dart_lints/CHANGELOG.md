@@ -1,3 +1,35 @@
+## 0.3.0
+
+- New `avoid_multi_document_dartdoc` in the `core` bundle: flags a dartdoc
+  block (a run of consecutive `///` lines) that contains a markdown heading
+  (`##` or deeper).
+
+  A heading inside a dartdoc is the author's own admission that the block
+  carries more than one document. The fix is not to shorten it — it is to
+  split each section onto the declaration it actually constrains: a class's
+  contract stays on the class, one method's behavior goes on that method, a
+  field's reason for existing goes on the field, and — for a method with
+  several independent optional parameters — Dart supports a doc comment on
+  each individual parameter, which IDE signature help then surfaces exactly
+  at the call site.
+
+  This is a narrow, high-precision smoke detector, not a length check. A
+  length threshold was tried first (measured against NovelGlide's `lib/`:
+  4494 comment blocks, 22870 lines) and rejected — some genuinely
+  single-purpose contracts run long by nature, and a length rule cannot tell
+  those apart from a real multi-document block. The heading signal is far
+  rarer (17 of the 4494 blocks, all true positives on inspection) but much
+  more deliberate: an author reaches for `##` specifically to separate
+  sections. Lower recall, high precision.
+
+  Enabling `core` in a project already running it turns this on immediately,
+  with no separate opt-in — this repo's own `log_system` package had three
+  hits once the rule went live here, all real: `LogSystem`'s class doc and
+  `init`'s doc each had a `##`-headed section explaining one specific
+  concern, and `LoggableException`'s class doc had one explaining a single
+  field. All three are split onto the declaration they actually describe in
+  this same release, so the rule ships with this repo already clean under it.
+
 ## 0.2.1
 
 - `avoid_catching_abstract_exception` gains a `sanctionedBases` option: abstract

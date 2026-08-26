@@ -19,6 +19,7 @@ import 'rules/core/avoid_catching_error.dart';
 import 'rules/core/avoid_catching_object.dart';
 import 'rules/core/avoid_empty_catch.dart';
 import 'rules/core/avoid_lint_suppression.dart';
+import 'rules/core/avoid_multi_document_dartdoc.dart';
 import 'rules/core/avoid_production_null_assertion.dart';
 import 'rules/core/avoid_record_types.dart';
 import 'rules/core/avoid_then_in_async.dart';
@@ -106,6 +107,11 @@ class RuleRegistry {
         generatedFiles: o['generatedFiles'] as List<String>?,
         sanctionedSuppressions: o['sanctionedSuppressions'] as List<String>?,
       ),
+    ),
+    RuleDescriptor(
+      name: 'avoid_multi_document_dartdoc',
+      bundle: 'core',
+      create: (Map<String, Object?> o) => AvoidMultiDocumentDartdoc(),
     ),
     RuleDescriptor(
       name: 'avoid_production_null_assertion',
