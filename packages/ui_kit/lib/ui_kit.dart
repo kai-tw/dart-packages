@@ -17,3 +17,4 @@ export 'src/info/common_loading_widget.dart';
 export 'src/info/common_progress_dialog.dart';
 export 'src/info/common_success_dialog.dart';
 export 'src/nav/common_nav_tile.dart';
+export 'src/step/common_step_indicator.dart';

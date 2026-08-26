@@ -1,3 +1,25 @@
+## 2.2.0
+- New `CommonStepIndicator`: a text label above N short pills, filled solid
+  through the current step and faint after it — a step counter for a wizard
+  whose length is fixed and known ahead of time (an onboarding guide, a short
+  setup flow), as distinct from `CommonLoadingWidget`'s determinate mode,
+  which reads as progress toward an unstated number and belongs to an
+  operation with a fraction rather than a step index.
+
+  Extracted from CherishCRM's onboarding guide, where it started as a
+  full-width continuous bar and changed shape twice before landing here: once
+  to move it out of the app bar into the centred page content (a bold bar
+  pinned to the top and a centred block below it read as two things
+  competing for attention across empty space), and once back into the app
+  bar after the bar itself became short segments — quiet enough that the
+  competition the first move was solving no longer existed. Both app bar and
+  in-page placement work: the widget sizes itself to its own compact width
+  rather than stretching, so a caller centres it however its own layout
+  already centres things.
+
+  Takes `label` as a required `String`, like every other widget here that
+  always shows text — see the README's Text ownership section.
+
 ## 2.1.0
 - `CommonInfoWidget` caps its content column at a new optional
   `maxContentWidth` (default `CommonInfoWidget.defaultMaxContentWidth`, 480).
