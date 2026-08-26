@@ -8,7 +8,6 @@ import 'package:ui_kit/ui_kit.dart';
 /// the theme's actual values.
 Future<ColorScheme> _pump(
   WidgetTester tester, {
-  required String label,
   required int current,
   required int total,
 }) async {
@@ -18,11 +17,7 @@ Future<ColorScheme> _pump(
       home: Builder(
         builder: (BuildContext context) {
           colors = Theme.of(context).colorScheme;
-          return CommonStepIndicator(
-            label: label,
-            current: current,
-            total: total,
-          );
+          return CommonStepIndicator(current: current, total: total);
         },
       ),
     ),
@@ -38,24 +33,18 @@ List<Color?> _segmentColors(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('renders the label and one segment per total step', (
+  testWidgets('renders one segment per total step', (
     WidgetTester tester,
   ) async {
-    await _pump(tester, label: 'Step 2 of 4', current: 1, total: 4);
+    await _pump(tester, current: 1, total: 4);
 
-    expect(find.text('Step 2 of 4'), findsOneWidget);
     expect(find.byType(DecoratedBox), findsNWidgets(4));
   });
 
   testWidgets('fills segments through current and leaves the rest faint', (
     WidgetTester tester,
   ) async {
-    final ColorScheme colors = await _pump(
-      tester,
-      label: 'Step 2 of 4',
-      current: 1,
-      total: 4,
-    );
+    final ColorScheme colors = await _pump(tester, current: 1, total: 4);
 
     expect(_segmentColors(tester), <Color?>[
       colors.primary,
@@ -68,12 +57,7 @@ void main() {
   testWidgets('the first step fills exactly one segment', (
     WidgetTester tester,
   ) async {
-    final ColorScheme colors = await _pump(
-      tester,
-      label: 'Step 1 of 3',
-      current: 0,
-      total: 3,
-    );
+    final ColorScheme colors = await _pump(tester, current: 0, total: 3);
 
     expect(_segmentColors(tester), <Color?>[
       colors.primary,
@@ -83,12 +67,7 @@ void main() {
   });
 
   testWidgets('the last step fills every segment', (WidgetTester tester) async {
-    final ColorScheme colors = await _pump(
-      tester,
-      label: 'Step 3 of 3',
-      current: 2,
-      total: 3,
-    );
+    final ColorScheme colors = await _pump(tester, current: 2, total: 3);
 
     expect(_segmentColors(tester), <Color?>[
       colors.primary,

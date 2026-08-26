@@ -38,8 +38,9 @@ class SimpleWidget extends StatelessWidget {
 - **CommonDeleteDialog**: confirm-then-delete dialog that manages its own
   async lifecycle around `onDelete` — spinner while it runs, stays open with
   an inline error on failure.
-- **CommonStepIndicator**: a text label above N short pills for a
-  fixed-length wizard, filled through the current step.
+- **CommonStepIndicator**: N short pills for a fixed-length wizard, filled
+  through the current step. Segments only — pair it with your own `Text` for
+  a label, positioned wherever your layout wants it.
 
 ### Text ownership
 

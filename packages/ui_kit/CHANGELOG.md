@@ -1,3 +1,24 @@
+## 3.0.0
+- **BREAKING** — `CommonStepIndicator` drops the `label` parameter and the
+  `Text` it rendered above the segments. The widget is the segments now,
+  nothing else.
+
+  2.2.0 shipped label-above-segments as one fixed composition on the
+  reasoning that the two always travel together. The first real caller
+  proved that wrong within the same week: CherishCRM's onboarding app bar
+  wanted the label in the toolbar's own `title` (centred against the whole
+  bar width) and the segments on their own in `bottom` below it — a layout
+  the bundled widget could not produce without CherishCRM either
+  duplicating the label outside it or living with the wrong composition.
+  Nothing about that split is unusual enough to treat as a special case
+  the widget should carry a flag for; a caller that wants a label composes
+  one line of `Text` next to this, wherever its own layout puts it.
+
+  **Adopters:** replace `CommonStepIndicator(label: ..., current: ...,
+  total: ...)` with `CommonStepIndicator(current: ..., total: ...)` plus
+  your own `Text(label)` positioned where the old rendering put it (directly
+  above the segments, with an 8px gap, is what 2.2.0 did internally).
+
 ## 2.2.0
 - New `CommonStepIndicator`: a text label above N short pills, filled solid
   through the current step and faint after it — a step counter for a wizard
