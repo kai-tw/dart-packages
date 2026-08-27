@@ -1,0 +1,44 @@
+name: connectivity_status
+description: >-
+  The device's network state as one value — offline, metered, or unmetered —
+  shared across my Flutter projects.
+version: 0.1.0
+repository: https://github.com/kai-tw/kai-packages/tree/main/packages/connectivity_status
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+  flutter: '>=3.3.0'
+
+resolution: workspace
+
+dependencies:
+  connectivity_plus: ^6.1.0
+  flutter:
+    sdk: flutter
+  log_system:
+    path: ../log_system
+  plugin_platform_interface: ^2.0.2
+  rxdart: ^0.28.0
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  mocktail: ^1.0.4
+
+# This section identifies this Flutter project as a plugin project — the
+# metered-network probe needs real native code, not just Dart calling an
+# existing plugin. `checkConnectivity` / `observeConnectivity` (the online/
+# offline half) go through the already-published `connectivity_plus` instead
+# of native code of our own; only the OS metered-capability read
+# (`NWPath.isExpensive` / `ConnectivityManager.isActiveNetworkMetered`) is
+# this package's own platform channel.
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: net.kaiwu.connectivity_status
+        pluginClass: ConnectivityStatusPlugin
+      ios:
+        pluginClass: ConnectivityStatusPlugin

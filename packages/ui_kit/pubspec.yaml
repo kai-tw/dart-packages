@@ -1,7 +1,7 @@
 name: ui_kit
 description: This is a UI kit that shares Flutter components through my projects.
 version: 3.0.0
-repository: https://github.com/kai-tw/dart-packages/tree/main/packages/ui_kit
+repository: https://github.com/kai-tw/kai-packages/tree/main/packages/ui_kit
 
 environment:
   sdk: ^3.8.0

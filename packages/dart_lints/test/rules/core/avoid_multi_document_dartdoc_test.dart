@@ -113,8 +113,10 @@ void main() {
       'is a different, shorter block, not part of the flagged one',
       () {
         expect(
-          _lint('/// ## Orphaned heading\n\n/// Actual doc, no heading.\n'
-              'class C {}'),
+          _lint(
+            '/// ## Orphaned heading\n\n/// Actual doc, no heading.\n'
+            'class C {}',
+          ),
           hasLength(1),
         );
       },
