@@ -6,6 +6,15 @@ analyzer:
     # prescribe for it. Every real package name in this repo still gets
     # checked, because the rule only ever looks at pubspec `name:` fields.
     package_names: ignore
+  exclude:
+    # Build output — `dart_lints.yaml`'s own `exclude:` only governs the
+    # custom-rule pass and the area-coverage check, not this stock `dart
+    # analyze` invocation, so it needs repeating here. Without it, actually
+    # building a package locally (a federated plugin's example app doing
+    # `flutter build ios`, say) litters the tree with vendored third-party
+    # SPM package sources under `build/`, which then get analyzed as if they
+    # were this repo's own code.
+    - "**/build/**"
 
 linter:
   rules:

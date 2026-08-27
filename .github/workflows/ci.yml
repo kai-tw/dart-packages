@@ -30,7 +30,8 @@ jobs:
       # disagree about scope. dart_lints runs `dart analyze --fatal-infos`
       # itself — the flags live in dart_lints.yaml, where dropping one is a
       # visible diff rather than a silent weakening (linter diagnostics are
-      # INFO severity, so without --fatal-infos they print and still exit 0).
+      # INFO severity, so without it the 71 rules in analysis_options.yaml
+      # print and the command still exits 0).
       - run: dart run dart_lints
 
       - run: dart test
@@ -44,10 +45,52 @@ jobs:
       - run: flutter test
         working-directory: packages/ui_kit
 
+      - run: flutter test
+        working-directory: packages/connectivity_status
+
+      # connectivity_status's example app is not in the pub workspace (a
+      # federated plugin's example never is), so it needs its own
+      # resolution before it can build.
+      - run: flutter pub get
+        working-directory: packages/connectivity_status/example
+
+      # Validates the Android half of the metered-probe plugin actually
+      # compiles and links — Dart unit tests mock ConnectivityMeteredDataSource,
+      # so they never touch the real native code. Runs on ubuntu because the
+      # Android SDK this needs ships on GitHub's runner already; the iOS half
+      # needs a real Xcode toolchain, so it gets its own macOS job below.
+      - run: flutter build apk --debug
+        working-directory: packages/connectivity_status/example
+
       # Catches pub.dev's own complaints (missing example, bad description
       # length, unresolvable doc links) before a release rather than during one.
       - run: dart pub publish --dry-run
         working-directory: packages/hybrid_logical_clock
 
-      # ui_kit is intentionally not published (git dependency only — see its
-      # README §Status), so no publish dry-run step for it.
+      # ui_kit and connectivity_status are intentionally not published (git
+      # dependency only), so no publish dry-run step for either.
+
+  connectivity_status_ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.44.0'
+          cache: true
+
+      - run: flutter pub get
+
+      - run: flutter pub get
+        working-directory: packages/connectivity_status/example
+
+      # The one native-code package in this repo, and the one reason this
+      # workflow needs a macOS runner at all: the metered-probe plugin's iOS
+      # side (Swift, a podspec, a Swift Package Manager manifest) can only be
+      # compiled with a real Xcode toolchain, which ubuntu-latest does not
+      # have. --no-codesign because CI has no signing identity and does not
+      # need one to prove the native code builds and links.
+      - run: flutter build ios --no-codesign --debug
+        working-directory: packages/connectivity_status/example

@@ -12,6 +12,12 @@ analyzer:
 exclude:
   - "**/*.freezed.dart"
   - "**/*.g.dart"
+  # Flutter/Xcode/Gradle build output — populated by actually building a
+  # package locally (a federated plugin's example app, say), never
+  # version-controlled. Without this, a local `flutter build ios` can litter
+  # the tree with vendored third-party SPM package sources under `build/`,
+  # which then get analyzed as if they were this repo's own code.
+  - "**/build/**"
 
 # Every Dart file must belong to an area or be listed here; anything else is a
 # configuration error rather than a region that silently goes unlinted.
@@ -26,9 +32,15 @@ areas:
     paths:
       - "packages/*/lib/**"
       - "packages/*/bin/**"
+      # A plugin's bundled example app is real, working code — a consumer
+      # reads it as the worked example of how to use the package, so it is
+      # held to the same bar as the package itself rather than exempted.
+      - "packages/*/example/lib/**"
   test:
     paths:
       - "packages/*/test/**"
+      - "packages/*/example/test/**"
+      - "packages/*/example/integration_test/**"
     disable:
       # Test-local decision tables and capture tuples are not DTOs.
       - avoid_record_types
@@ -42,3 +54,17 @@ options:
     # These packages are published libraries: their top-level declarations are
     # the public API, not stray globals. The rule's premise does not hold here.
     scope: library
+  public_class_names_its_file:
+    exemptFiles:
+      # Flutter's own convention: an app's entry point is always main.dart,
+      # and nothing requires its root widget's name to match. Every Flutter
+      # app in existence has this "mismatch" — it isn't a defect to flag.
+      - main.dart
+      # A federated plugin's platform-interface pair, in the exact shape
+      # `flutter create --template=plugin` generates:
+      # `<pkg>_platform_interface.dart` declares `<Pkg>Platform`,
+      # `<pkg>_method_channel.dart` declares `MethodChannel<Pkg>`. Neither
+      # name is ever going to match its filename, for any federated plugin
+      # this repo ever adds — the mismatch is the convention, not a typo.
+      - _platform_interface.dart
+      - _method_channel.dart

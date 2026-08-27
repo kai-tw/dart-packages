@@ -8,6 +8,7 @@ environment:
   sdk: ^3.8.0
 
 workspace:
+  - packages/connectivity_status
   - packages/dart_lints
   - packages/hybrid_logical_clock
   - packages/log_system
