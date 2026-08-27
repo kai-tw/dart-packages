@@ -1,4 +1,4 @@
-import 'package:connectivity_status/connectivity_status.dart';
+import 'package:connectivity_status/src/data/connectivity_metered_data_source.dart';
 
 /// Hand-written fake for [ConnectivityMeteredDataSource].
 ///

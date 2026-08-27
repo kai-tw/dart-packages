@@ -11,9 +11,8 @@ void main() {
 
   // This example has no DI framework of its own — `.shared()` is the
   // zero-config path, wrapping ConnectivityRepository.instance. A consumer
-  // using get_it or Riverpod would register ConnectivityRepository.platform
-  // with its container instead and inject the result via the plain
-  // constructors.
+  // using get_it or Riverpod would register that same instance with its
+  // container instead and inject the result via the plain constructors.
   runApp(
     MyApp(
       getConnectivity: GetConnectivityUseCase.shared(),

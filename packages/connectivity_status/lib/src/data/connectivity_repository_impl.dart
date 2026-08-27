@@ -13,26 +13,24 @@ import 'connectivity_metered_data_source.dart';
 import 'connectivity_metered_data_source_impl.dart';
 
 /// Internal to this package — never exported. Reach this only through
-/// [ConnectivityRepository.platform] / [ConnectivityRepository.instance];
-/// a consumer that spelled this class name directly would have coupled to
-/// the implementation instead of the contract.
+/// [ConnectivityRepository.instance]; a consumer that spelled this class
+/// name directly would have coupled to the implementation instead of the
+/// contract.
 class ConnectivityRepositoryImpl implements ConnectivityRepository {
   ConnectivityRepositoryImpl(this._source, this._meteredSource) {
     _seedAndForward();
   }
 
-  /// The real platform wiring: [ConnectivityDataSourceImpl] and
-  /// [ConnectivityMeteredDataSourceImpl] behind this repository.
-  factory ConnectivityRepositoryImpl.platform() => ConnectivityRepositoryImpl(
-    ConnectivityDataSourceImpl(),
-    ConnectivityMeteredDataSourceImpl(),
-  );
-
   static ConnectivityRepository? _instance;
 
-  /// Backs [ConnectivityRepository.instance].
+  /// Backs [ConnectivityRepository.instance]. The real platform wiring —
+  /// [ConnectivityDataSourceImpl] and [ConnectivityMeteredDataSourceImpl] —
+  /// built once, on first access.
   static ConnectivityRepository get instance =>
-      _instance ??= ConnectivityRepositoryImpl.platform();
+      _instance ??= ConnectivityRepositoryImpl(
+        ConnectivityDataSourceImpl(),
+        ConnectivityMeteredDataSourceImpl(),
+      );
 
   /// Backs [ConnectivityRepository.resetInstance] — unrestricted here since
   /// this class is already `src/`-internal; the `@visibleForTesting` gate

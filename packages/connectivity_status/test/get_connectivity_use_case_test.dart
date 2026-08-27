@@ -15,7 +15,7 @@ void main() {
   group('GetConnectivityUseCase.shared', () {
     // .shared() wraps the real ConnectivityRepository.instance, which
     // probes connectivity_plus's own channel eagerly at construction — the
-    // same reason ConnectivityRepository.platform's own tests need this
+    // same reason ConnectivityRepository.instance's own tests need this
     // mock, not a mocktail double.
     const MethodChannel connectivityChannel = MethodChannel(
       'dev.fluttercommunity.plus/connectivity',

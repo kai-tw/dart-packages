@@ -10,27 +10,27 @@ import 'connectivity_status.dart';
 /// subscribe to the full lifetime via [observeStatus], which emits the
 /// current value immediately and then again on every change.
 ///
-/// Never implemented outside this package — [platform] and [instance] are
-/// the only way to get one. The concrete class stays internal on purpose:
-/// a consumer that never has to spell its name can't accidentally couple to
-/// it instead of this contract.
+/// Never implemented outside this package — [instance] is the only way to
+/// get one. The concrete class stays internal on purpose: a consumer that
+/// never has to spell its name can't accidentally couple to it instead of
+/// this contract. There is no separate "build me a fresh one" constructor
+/// either — a device has exactly one real network state, so every consumer,
+/// DI framework or none, reads the same [instance].
 abstract class ConnectivityRepository {
-  /// The real platform wiring — a fresh instance every call. Register the
-  /// *tear-off*, not a call, with whatever DI your app uses:
+  /// The shared repository. Built once, on first access.
+  ///
+  /// A consumer using `get_it`, Riverpod, or anything else registers this
+  /// getter's *value*, not a rebuild of it:
   ///
   /// ```dart
-  /// sl.registerLazySingleton<ConnectivityRepository>(ConnectivityRepository.platform);
-  /// ```
-  factory ConnectivityRepository.platform() =>
-      ConnectivityRepositoryImpl.platform();
-
-  /// The shared instance for a consumer with no DI framework of its own.
-  /// Built once, on first access, via [ConnectivityRepository.platform].
+  /// // get_it
+  /// sl.registerLazySingleton<ConnectivityRepository>(() => ConnectivityRepository.instance);
   ///
-  /// A consumer using `get_it`, Riverpod, or anything else registers
-  /// [ConnectivityRepository.platform] with it instead of reading this
-  /// getter — that keeps the app's own container the one source of truth
-  /// for the instance, rather than two caches that could disagree.
+  /// // riverpod
+  /// @riverpod
+  /// ConnectivityRepository connectivityRepository(Ref ref) =>
+  ///     ConnectivityRepository.instance;
+  /// ```
   static ConnectivityRepository get instance =>
       ConnectivityRepositoryImpl.instance;
 

@@ -44,15 +44,11 @@ genuine unmetered link. When the platform exposes no metered signal (desktop,
 web) or the probe faults, the repository falls back to a Wi-Fi/ethernet
 allowlist.
 
-## Assembling it: on the contract, not the implementation
+## Assembling it: `ConnectivityRepository.instance` is the only door in
 
 ```dart
 abstract class ConnectivityRepository {
-  /// The real platform wiring — a fresh instance every call.
-  factory ConnectivityRepository.platform() => ...;
-
-  /// Shared instance for a consumer with no DI framework — built once,
-  /// on first access, via [platform].
+  /// The shared repository. Built once, on first access.
   static ConnectivityRepository get instance => ...;
 
   Future<ConnectivityStatus> getStatus();
@@ -60,49 +56,47 @@ abstract class ConnectivityRepository {
 }
 ```
 
-This package ships that wiring rather than leaving every consumer to
-re-derive it, unlike `preference_store`. `PreferenceRepository<T>` is a
-template — each domain (reader settings, TTS, …) instantiates it into its
-own shape, so there is no one correct wiring a package could hand back.
-`ConnectivityRepository` has no such variance: every consumer wants the
-exact same real data source and metered probe behind it, so the assembly
-belongs here once instead of copied into every app that depends on this
-package.
+A device has exactly one real network state, so there is no "build me an
+independent fresh instance" constructor to register — every consumer, DI
+framework or none, reads the same [instance]. That single shared object is
+also why this package ships the wiring at all, unlike `preference_store`:
+`PreferenceRepository<T>` is a template each domain (reader settings, TTS, …)
+instantiates into its own shape, so there is no one correct wiring a package
+could hand back; `ConnectivityRepository` has no such variance.
 
-**The concrete class is never exported.** `.platform()` and `.instance`
-live on `ConnectivityRepository` itself — the interface, not
-`ConnectivityRepositoryImpl` — so no consumer ever has a reason to spell
-the implementation's name. A consumer that never sees that name can't
-accidentally couple to it instead of the contract.
+**Nothing behind the contract is exported** — not the concrete
+`ConnectivityRepositoryImpl`, not the `ConnectivityDataSource` /
+`ConnectivityMeteredDataSource` adapters it's built from. A consumer never
+has a name to spell other than `ConnectivityRepository`, so it can't
+accidentally couple to the implementation instead of the contract.
 
-- **`ConnectivityRepository.platform()`** — a fresh instance every call.
-  Register *this* (a tear-off, not a call) with whatever DI your app uses:
-
-  ```dart
-  // get_it
-  sl.registerLazySingleton<ConnectivityRepository>(ConnectivityRepository.platform);
-
-  // riverpod
-  @riverpod
-  ConnectivityRepository connectivityRepository(Ref ref) =>
-      ConnectivityRepository.platform();
-  ```
-
-- **`ConnectivityRepository.instance`** — the shared instance for an app
-  with no DI framework at all. `GetConnectivityUseCase.shared()` and
-  `ObserveConnectivityUseCase.shared()` wrap it, so the zero-config path
-  never needs to touch `ConnectivityRepository` directly either:
+- **No DI framework?** `GetConnectivityUseCase.shared()` and
+  `ObserveConnectivityUseCase.shared()` wrap `ConnectivityRepository.instance`
+  directly — the zero-config path never touches `ConnectivityRepository` at
+  all:
 
   ```dart
   final getConnectivity = GetConnectivityUseCase.shared();
   final observeConnectivity = ObserveConnectivityUseCase.shared();
   ```
 
-  A consumer using a DI framework should register `.platform` with its
-  container and inject the result via the plain constructors
-  (`GetConnectivityUseCase(repository)`) instead of reading `.instance` —
-  that keeps the app's own container the one source of truth for the
-  instance, rather than two caches that could disagree.
+- **Using `get_it` or Riverpod?** Register the getter's *value*, not a
+  rebuild of it — there's nothing to rebuild:
+
+  ```dart
+  // get_it
+  sl.registerLazySingleton<ConnectivityRepository>(() => ConnectivityRepository.instance);
+
+  // riverpod
+  @riverpod
+  ConnectivityRepository connectivityRepository(Ref ref) =>
+      ConnectivityRepository.instance;
+  ```
+
+  Inject the container's result via the plain constructors
+  (`GetConnectivityUseCase(repository)`) rather than reading `.instance`
+  again elsewhere — that keeps the app's own container the one place that
+  names it.
 
 ## What this package does not do
 
@@ -124,10 +118,14 @@ that native code is registered automatically by `GeneratedPluginRegistrant`;
 a consuming app never calls anything in its own `AppDelegate` /
 `MainActivity`.
 
-A platform with no native handler registered (desktop, web) leaves
-`ConnectivityMeteredDataSourceImpl` seeing a `MissingPluginException`, which
-it treats as "no metered signal on this platform" — the documented case the
-repository's allowlist fallback exists for, not a swallowed failure.
+A platform with no native handler registered (desktop, web) surfaces a
+`MissingPluginException` internally, which this package treats as "no
+metered signal on this platform" — the documented case the repository's
+allowlist fallback exists for, not a swallowed failure. A consumer that needs
+to probe the plugin's own platform-interface layer directly (rare — most
+should go through `ConnectivityRepository`) can still reach
+`ConnectivityStatusPlatform.instance`, the federated plugin's own
+extensibility point.
 
 Requires `android.permission.ACCESS_NETWORK_STATE` on Android. iOS needs no
 extra entitlement.

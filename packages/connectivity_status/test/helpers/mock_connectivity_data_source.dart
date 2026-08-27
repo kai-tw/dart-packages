@@ -1,4 +1,4 @@
-import 'package:connectivity_status/connectivity_status.dart';
+import 'package:connectivity_status/src/data/connectivity_data_source.dart';
 import 'package:mocktail/mocktail.dart';
 
 /// Safe under the "no `Mock implements` over a stream getter" rule:
