@@ -133,13 +133,22 @@ class _Visitor extends LintVisitor {
       return;
     }
 
+    // Every class declared here, private ones included: a descent chain may
+    // pass through an intermediate the file does not export.
+    final Map<String, ClassDeclaration> declaredHere =
+        <String, ClassDeclaration>{
+          for (final ClassDeclaration c
+              in node.declarations.whereType<ClassDeclaration>())
+            c.name.lexeme: c,
+        };
+
     final String owner = primary.name.lexeme;
     for (final ClassDeclaration c in classes) {
       if (identical(c, primary)) {
         continue;
       }
       final String other = c.name.lexeme;
-      if (other.startsWith(owner) || _isSubtypeOf(c, owner)) {
+      if (other.startsWith(owner) || _descendsFrom(c, owner, declaredHere)) {
         continue;
       }
       report(
@@ -200,22 +209,45 @@ class _Visitor extends LintVisitor {
     return node.directives.any((Directive d) => d is PartOfDirective);
   }
 
-  bool _isSubtypeOf(ClassDeclaration c, String owner) {
-    if (c.extendsClause?.superclass.name.lexeme == owner) {
-      return true;
+  /// Whether [c] reaches [owner] through any chain of supertypes declared in
+  /// this same file.
+  ///
+  /// The walk has to be transitive, not one hop. A `sealed` hierarchy nests —
+  /// `AppNotificationEvent` ← `BookImportNotificationEvent` ←
+  /// `BookImportSucceededNotificationEvent` — and Dart requires **every**
+  /// descendant to sit in the base's library, not just the direct children.
+  /// A one-hop check therefore reports grandchildren as unowned siblings and
+  /// tells the reader to move a class the compiler will not let them move.
+  bool _descendsFrom(
+    ClassDeclaration c,
+    String owner,
+    Map<String, ClassDeclaration> declaredHere,
+  ) {
+    final Set<String> visited = <String>{};
+    final List<String> frontier = _supertypeNames(c);
+    while (frontier.isNotEmpty) {
+      final String name = frontier.removeLast();
+      if (name == owner) {
+        return true;
+      }
+      if (!visited.add(name)) {
+        continue;
+      }
+      final ClassDeclaration? parent = declaredHere[name];
+      if (parent != null) {
+        frontier.addAll(_supertypeNames(parent));
+      }
     }
-    final bool implementsIt =
-        c.implementsClause?.interfaces.any(
-          (NamedType t) => t.name.lexeme == owner,
-        ) ??
-        false;
-    if (implementsIt) {
-      return true;
-    }
-    return c.withClause?.mixinTypes.any(
-          (NamedType t) => t.name.lexeme == owner,
-        ) ??
-        false;
+    return false;
+  }
+
+  List<String> _supertypeNames(ClassDeclaration c) {
+    final ExtendsClause? extendsClause = c.extendsClause;
+    return <String>[
+      if (extendsClause != null) extendsClause.superclass.name.lexeme,
+      ...?c.implementsClause?.interfaces.map((NamedType t) => t.name.lexeme),
+      ...?c.withClause?.mixinTypes.map((NamedType t) => t.name.lexeme),
+    ];
   }
 
   String _baseName() {

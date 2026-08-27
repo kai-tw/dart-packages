@@ -112,6 +112,46 @@ void main() {
       },
     );
 
+    test(
+      '[boundary] a GRANDCHILD of the primary — a nested sealed hierarchy '
+      'Dart forbids splitting, so reporting it would name an impossible fix',
+      () {
+        expect(
+          _lint('''
+sealed class AppNotificationEvent {}
+sealed class BookImportNotificationEvent extends AppNotificationEvent {}
+final class BookImportSucceededNotificationEvent
+    extends BookImportNotificationEvent {}
+''', path: 'lib/app_notification_event.dart'),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      '[boundary] an unrelated class in that same file is still reported — '
+      'the transitive walk widens the exemption, it does not disable it',
+      () {
+        final List<LintViolation> found = _lint('''
+sealed class AppNotificationEvent {}
+sealed class BookImportNotificationEvent extends AppNotificationEvent {}
+final class TrashNoticeTarget extends Equatable {}
+''', path: 'lib/app_notification_event.dart');
+        expect(found, hasLength(1));
+        expect(found.single.message, contains('TrashNoticeTarget'));
+      },
+    );
+
+    test('[boundary] a supertype cycle terminates instead of hanging', () {
+      expect(
+        _lint(
+          'class Foo {}\nclass A extends B {}\nclass B extends A {}',
+          path: 'lib/foo.dart',
+        ),
+        hasLength(2),
+      );
+    });
+
     test('[partition] implements and with count as subtyping too', () {
       expect(
         _lint(

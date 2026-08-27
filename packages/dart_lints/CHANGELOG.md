@@ -1,3 +1,20 @@
+## 0.4.1
+
+- Fix `public_class_names_its_file`: the subtype exemption now walks the
+  supertype chain **transitively** within the file, instead of checking one
+  hop. A `sealed` hierarchy nests — `AppNotificationEvent` ←
+  `BookImportNotificationEvent` ← `BookImportSucceededNotificationEvent` — and
+  Dart requires *every* descendant to live in the base's library, not just the
+  direct children. The one-hop check reported those grandchildren as unowned
+  siblings and told the reader to move a class the compiler refuses to let them
+  move: acting on the message produced
+  `invalid_use_of_type_outside_library`. Found by a consumer hitting exactly
+  that compile error.
+
+  The walk widens the exemption without disabling it — an unrelated class in
+  the same file (one that reaches `Equatable` rather than the primary) is still
+  reported, and a supertype cycle terminates rather than hanging.
+
 ## 0.4.0
 
 - New `public_class_names_its_file` in the `core` bundle: one principle —
