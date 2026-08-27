@@ -10,7 +10,7 @@ contract, the `connectivity_plus` adapter, and the native metered-network
 probe. CherishCRM's onboarding flow is the second consumer.
 
 ```dart
-// No DI framework? .shared() wraps ConnectivityRepositoryImpl.instance.
+// No DI framework? .shared() wraps ConnectivityRepository.instance.
 final GetConnectivityUseCase getConnectivity = GetConnectivityUseCase.shared();
 final ObserveConnectivityUseCase observeConnectivity = ObserveConnectivityUseCase.shared();
 
@@ -44,21 +44,19 @@ genuine unmetered link. When the platform exposes no metered signal (desktop,
 web) or the probe faults, the repository falls back to a Wi-Fi/ethernet
 allowlist.
 
-## Assembling it: two constructors, not a top-level function
+## Assembling it: on the contract, not the implementation
 
 ```dart
-class ConnectivityRepositoryImpl implements ConnectivityRepository {
-  ConnectivityRepositoryImpl(this._source, this._meteredSource) { ... }
-
-  /// The real platform wiring.
-  factory ConnectivityRepositoryImpl.platform() => ConnectivityRepositoryImpl(
-    ConnectivityDataSourceImpl(),
-    ConnectivityMeteredDataSourceImpl(),
-  );
+abstract class ConnectivityRepository {
+  /// The real platform wiring — a fresh instance every call.
+  factory ConnectivityRepository.platform() => ...;
 
   /// Shared instance for a consumer with no DI framework — built once,
-  /// on first access.
+  /// on first access, via [platform].
   static ConnectivityRepository get instance => ...;
+
+  Future<ConnectivityStatus> getStatus();
+  ValueStream<ConnectivityStatus> observeStatus();
 }
 ```
 
@@ -71,27 +69,29 @@ exact same real data source and metered probe behind it, so the assembly
 belongs here once instead of copied into every app that depends on this
 package.
 
-Two constructors on the class itself, not a top-level function, so both
-paths stay discoverable from the type and neither reads as a global:
+**The concrete class is never exported.** `.platform()` and `.instance`
+live on `ConnectivityRepository` itself — the interface, not
+`ConnectivityRepositoryImpl` — so no consumer ever has a reason to spell
+the implementation's name. A consumer that never sees that name can't
+accidentally couple to it instead of the contract.
 
-- **`ConnectivityRepositoryImpl.platform()`** — a fresh instance every
-  call. Register *this* (a tear-off, not a call) with whatever DI your app
-  uses:
+- **`ConnectivityRepository.platform()`** — a fresh instance every call.
+  Register *this* (a tear-off, not a call) with whatever DI your app uses:
 
   ```dart
   // get_it
-  sl.registerLazySingleton<ConnectivityRepository>(ConnectivityRepositoryImpl.platform);
+  sl.registerLazySingleton<ConnectivityRepository>(ConnectivityRepository.platform);
 
   // riverpod
   @riverpod
   ConnectivityRepository connectivityRepository(Ref ref) =>
-      ConnectivityRepositoryImpl.platform();
+      ConnectivityRepository.platform();
   ```
 
-- **`ConnectivityRepositoryImpl.instance`** — the shared instance for an
-  app with no DI framework at all. `GetConnectivityUseCase.shared()` and
+- **`ConnectivityRepository.instance`** — the shared instance for an app
+  with no DI framework at all. `GetConnectivityUseCase.shared()` and
   `ObserveConnectivityUseCase.shared()` wrap it, so the zero-config path
-  never needs to name `ConnectivityRepositoryImpl` directly:
+  never needs to touch `ConnectivityRepository` directly either:
 
   ```dart
   final getConnectivity = GetConnectivityUseCase.shared();

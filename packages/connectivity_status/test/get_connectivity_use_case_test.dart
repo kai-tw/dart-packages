@@ -13,9 +13,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('GetConnectivityUseCase.shared', () {
-    // .shared() wraps the real ConnectivityRepositoryImpl.instance, which
+    // .shared() wraps the real ConnectivityRepository.instance, which
     // probes connectivity_plus's own channel eagerly at construction — the
-    // same reason ConnectivityRepositoryImpl.platform's own tests need this
+    // same reason ConnectivityRepository.platform's own tests need this
     // mock, not a mocktail double.
     const MethodChannel connectivityChannel = MethodChannel(
       'dev.fluttercommunity.plus/connectivity',
@@ -53,16 +53,16 @@ void main() {
           .setMockMethodCallHandler(connectivityChannel, null);
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockStreamHandler(connectivityEventChannel, null);
-      ConnectivityRepositoryImpl.resetInstance();
+      ConnectivityRepository.resetInstance();
     });
 
     test(
-      'reuses ConnectivityRepositoryImpl.instance, not a fresh repository',
+      'reuses ConnectivityRepository.instance, not a fresh repository',
       () async {
         // Force the singleton to exist and its construction-time seed to
         // settle first, so the count below isolates what .shared() itself
         // causes.
-        ConnectivityRepositoryImpl.instance;
+        ConnectivityRepository.instance;
         await Future<void>.delayed(Duration.zero);
         final int callsBeforeSharedUseCase = checkCalls;
 
@@ -103,7 +103,7 @@ void main() {
     '[FMEA-lite] a repository failure propagates, is not swallowed',
     () async {
       // `thenAnswer((_) async => throw err)`, not `thenThrow(err)` — the real
-      // ConnectivityRepositoryImpl.getStatus() is `async`, so a throw inside it
+      // ConnectivityRepository.getStatus() is `async`, so a throw inside it
       // always arrives as a rejected Future. `thenThrow` makes the mocked call
       // throw synchronously instead, which would fail before `useCase()` even
       // returns a Future to assert against.

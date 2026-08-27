@@ -3,17 +3,17 @@ import 'package:flutter/material.dart';
 
 void main() {
   // Required before touching any platform channel — the shared
-  // ConnectivityRepositoryImpl.instance behind `.shared()` seeds itself
-  // from the connectivity and metered adapters immediately on first access,
-  // so this must come first, not after runApp(), which would otherwise
+  // ConnectivityRepository.instance behind `.shared()` seeds itself from
+  // the connectivity and metered adapters immediately on first access, so
+  // this must come first, not after runApp(), which would otherwise
   // initialize the binding one line too late.
   WidgetsFlutterBinding.ensureInitialized();
 
   // This example has no DI framework of its own — `.shared()` is the
-  // zero-config path, wrapping ConnectivityRepositoryImpl.instance. A
-  // consumer using get_it or Riverpod would register
-  // ConnectivityRepositoryImpl.platform with its container instead and
-  // inject the result via the plain constructors.
+  // zero-config path, wrapping ConnectivityRepository.instance. A consumer
+  // using get_it or Riverpod would register ConnectivityRepository.platform
+  // with its container instead and inject the result via the plain
+  // constructors.
   runApp(
     MyApp(
       getConnectivity: GetConnectivityUseCase.shared(),

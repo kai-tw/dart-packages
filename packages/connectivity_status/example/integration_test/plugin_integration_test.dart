@@ -14,8 +14,11 @@ void main() {
     'the metered channel answers true, false, or MissingPluginException — '
     'never a stale wrapper exception',
     (WidgetTester tester) async {
+      // .platform() isolates the native channel itself, same principle as
+      // ConnectivityRepository.platform — this test never names the
+      // implementation class.
       final ConnectivityMeteredDataSource source =
-          ConnectivityMeteredDataSourceImpl();
+          ConnectivityMeteredDataSource.platform();
 
       // On a real iOS/Android device or simulator this resolves via the
       // native handler this package ships; MissingPluginException would mean
@@ -28,15 +31,12 @@ void main() {
   );
 
   testWidgets(
-    'GetConnectivityUseCase resolves a real status against the real adapters',
+    'GetConnectivityUseCase.shared() resolves a real status against the '
+    'real adapters',
     (WidgetTester tester) async {
-      final ConnectivityRepository repository = ConnectivityRepositoryImpl(
-        ConnectivityDataSourceImpl(),
-        ConnectivityMeteredDataSourceImpl(),
-      );
-      final ConnectivityStatus status = await GetConnectivityUseCase(
-        repository,
-      )();
+      // The same zero-config path a real consumer with no DI framework
+      // would use — not a hand-assembled repository.
+      final ConnectivityStatus status = await GetConnectivityUseCase.shared()();
 
       expect(ConnectivityStatus.values, contains(status));
     },

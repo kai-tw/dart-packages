@@ -25,7 +25,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ObserveConnectivityUseCase.shared', () {
-    // .shared() wraps the real ConnectivityRepositoryImpl.instance, which
+    // .shared() wraps the real ConnectivityRepository.instance, which
     // probes connectivity_plus's own channel eagerly at construction — see
     // GetConnectivityUseCase.shared's own tests for why this needs a real
     // channel mock rather than a mocktail double.
@@ -65,16 +65,16 @@ void main() {
           .setMockMethodCallHandler(connectivityChannel, null);
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockStreamHandler(connectivityEventChannel, null);
-      ConnectivityRepositoryImpl.resetInstance();
+      ConnectivityRepository.resetInstance();
     });
 
     test(
-      'reuses ConnectivityRepositoryImpl.instance, not a fresh repository',
+      'reuses ConnectivityRepository.instance, not a fresh repository',
       () async {
         // Force the singleton to exist and its construction-time seed to
         // settle first, so the count below isolates what .shared() itself
         // causes.
-        ConnectivityRepositoryImpl.instance;
+        ConnectivityRepository.instance;
         await Future<void>.delayed(Duration.zero);
         final int callsBeforeSharedUseCase = checkCalls;
 

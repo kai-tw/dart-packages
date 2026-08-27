@@ -1,12 +1,13 @@
 import 'package:connectivity_status/connectivity_status.dart';
+import 'package:connectivity_status/src/data/connectivity_repository_impl.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Covers [ConnectivityRepositoryImpl.platform] and the shared
-/// [ConnectivityRepositoryImpl.instance] — both wire the *real*
-/// [ConnectivityDataSourceImpl], and the repository probes it eagerly at
-/// construction, so exercising either here means standing in for
-/// `connectivity_plus`'s own channels, not just calling a constructor.
+/// Covers [ConnectivityRepository.platform] and [ConnectivityRepository.instance]
+/// — both wire the *real* [ConnectivityDataSourceImpl], and the repository
+/// probes it eagerly at construction, so exercising either here means
+/// standing in for `connectivity_plus`'s own channels, not just calling a
+/// constructor.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -42,40 +43,53 @@ void main() {
         .setMockMethodCallHandler(connectivityChannel, null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockStreamHandler(connectivityEventChannel, null);
-    ConnectivityRepositoryImpl.resetInstance();
+    ConnectivityRepository.resetInstance();
   });
 
-  group('ConnectivityRepositoryImpl.platform', () {
+  group('ConnectivityRepository.platform', () {
     test('returns a real, working repository', () async {
       final ConnectivityRepository repository =
-          ConnectivityRepositoryImpl.platform();
+          ConnectivityRepository.platform();
 
-      expect(repository, isA<ConnectivityRepositoryImpl>());
       await Future<void>.delayed(Duration.zero);
       expect(repository.observeStatus().value, ConnectivityStatus.offline);
     });
 
+    test(
+      'is backed by the internal impl, not something a consumer could swap',
+      () {
+        // The one place this package's own test suite pins the concrete
+        // class — proving the public factory actually constructs a real,
+        // working object rather than, say, an unimplemented stub. No
+        // consumer test should ever need to do this.
+        expect(
+          ConnectivityRepository.platform(),
+          isA<ConnectivityRepositoryImpl>(),
+        );
+      },
+    );
+
     test('each call builds an independent instance, not a shared one', () {
-      final ConnectivityRepository a = ConnectivityRepositoryImpl.platform();
-      final ConnectivityRepository b = ConnectivityRepositoryImpl.platform();
+      final ConnectivityRepository a = ConnectivityRepository.platform();
+      final ConnectivityRepository b = ConnectivityRepository.platform();
 
       expect(identical(a, b), isFalse);
     });
   });
 
-  group('ConnectivityRepositoryImpl.instance', () {
+  group('ConnectivityRepository.instance', () {
     test('returns the same instance on every access', () {
-      final ConnectivityRepository a = ConnectivityRepositoryImpl.instance;
-      final ConnectivityRepository b = ConnectivityRepositoryImpl.instance;
+      final ConnectivityRepository a = ConnectivityRepository.instance;
+      final ConnectivityRepository b = ConnectivityRepository.instance;
 
       expect(identical(a, b), isTrue);
     });
 
     test('resetInstance() drops the cache — the next access builds fresh', () {
-      final ConnectivityRepository before = ConnectivityRepositoryImpl.instance;
+      final ConnectivityRepository before = ConnectivityRepository.instance;
 
-      ConnectivityRepositoryImpl.resetInstance();
-      final ConnectivityRepository after = ConnectivityRepositoryImpl.instance;
+      ConnectivityRepository.resetInstance();
+      final ConnectivityRepository after = ConnectivityRepository.instance;
 
       expect(
         identical(before, after),

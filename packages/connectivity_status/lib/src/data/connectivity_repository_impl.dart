@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:log_system/log_system.dart';
 import 'package:rxdart/rxdart.dart';
@@ -13,6 +12,10 @@ import 'connectivity_data_source_impl.dart';
 import 'connectivity_metered_data_source.dart';
 import 'connectivity_metered_data_source_impl.dart';
 
+/// Internal to this package — never exported. Reach this only through
+/// [ConnectivityRepository.platform] / [ConnectivityRepository.instance];
+/// a consumer that spelled this class name directly would have coupled to
+/// the implementation instead of the contract.
 class ConnectivityRepositoryImpl implements ConnectivityRepository {
   ConnectivityRepositoryImpl(this._source, this._meteredSource) {
     _seedAndForward();
@@ -25,23 +28,18 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
     ConnectivityMeteredDataSourceImpl(),
   );
 
-  /// The shared repository for a consumer with no DI framework of its own.
-  /// Built once, on first access, via [ConnectivityRepositoryImpl.platform].
-  ///
-  /// A consumer using `get_it`, Riverpod, or anything else registers
-  /// [ConnectivityRepositoryImpl.platform] with it instead of reading this
-  /// getter — that keeps the app's own container the one source of truth
-  /// for the instance, rather than two caches (this one and the
-  /// container's) that could disagree.
   static ConnectivityRepository? _instance;
+
+  /// Backs [ConnectivityRepository.instance].
   static ConnectivityRepository get instance =>
       _instance ??= ConnectivityRepositoryImpl.platform();
 
-  /// Drops the shared [instance]. Test seam — production code never calls
-  /// it. Without this, the first test in a suite to touch [instance] would
-  /// leave every later test sharing its repository (and its already-open
-  /// platform-channel subscriptions).
-  @visibleForTesting
+  /// Backs [ConnectivityRepository.resetInstance] — unrestricted here since
+  /// this class is already `src/`-internal; the `@visibleForTesting` gate
+  /// that matters lives on the public-facing forwarding member instead
+  /// (annotating both would make the interface's own forwarding call a
+  /// cross-file use of a restricted member, which the analyzer flags even
+  /// though the caller is exactly as restricted as the callee).
   static void resetInstance() => _instance = null;
 
   final ConnectivityDataSource _source;
