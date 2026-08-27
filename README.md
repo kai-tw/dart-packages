@@ -1,4 +1,4 @@
-# dart-packages
+# kai-packages
 
 Dart packages shared across my apps. One repo, one lockfile, one CI run — a
 [pub workspace](https://dart.dev/tools/pub/workspaces), so two packages here can

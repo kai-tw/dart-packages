@@ -138,10 +138,10 @@ Local iteration does not need a tag:
 ```yaml
 dev_dependencies:
   dart_lints:
-    git: { url: …/dart-packages.git, path: packages/dart_lints, ref: dart_lints-v0.1.0 }
+    git: { url: …/kai-packages.git, path: packages/dart_lints, ref: dart_lints-v0.1.0 }
 
 dependency_overrides:
-  dart_lints: { path: ../dart-packages/packages/dart_lints }
+  dart_lints: { path: ../kai-packages/packages/dart_lints }
 ```
 
 Verified working: pub accepts a path override onto a workspace member from

@@ -4,7 +4,7 @@ description: >-
   enabled rules come from a per-repo YAML file, so the same rule set serves an
   app and a pure-Dart library without either inheriting the other's house rules.
 version: 0.4.2
-repository: https://github.com/kai-tw/dart-packages/tree/main/packages/dart_lints
+repository: https://github.com/kai-tw/kai-packages/tree/main/packages/dart_lints
 
 environment:
   sdk: ^3.8.0
