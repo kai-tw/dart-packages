@@ -8,10 +8,7 @@ void main() {
   // runApp(), which would otherwise initialize the binding one line too late.
   WidgetsFlutterBinding.ensureInitialized();
 
-  final ConnectivityRepository repository = ConnectivityRepositoryImpl(
-    ConnectivityDataSourceImpl(),
-    ConnectivityMeteredDataSourceImpl(),
-  );
+  final ConnectivityRepository repository = createConnectivityRepository();
   runApp(
     MyApp(
       getConnectivity: GetConnectivityUseCase(repository),

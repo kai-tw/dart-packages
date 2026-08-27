@@ -10,10 +10,7 @@ contract, the `connectivity_plus` adapter, and the native metered-network
 probe. CherishCRM's onboarding flow is the second consumer.
 
 ```dart
-final ConnectivityRepository repository = ConnectivityRepositoryImpl(
-  ConnectivityDataSourceImpl(),
-  ConnectivityMeteredDataSourceImpl(),
-);
+final ConnectivityRepository repository = createConnectivityRepository();
 
 final GetConnectivityUseCase getConnectivity = GetConnectivityUseCase(repository);
 final ObserveConnectivityUseCase observeConnectivity = ObserveConnectivityUseCase(repository);
@@ -48,12 +45,41 @@ genuine unmetered link. When the platform exposes no metered signal (desktop,
 web) or the probe faults, the repository falls back to a Wi-Fi/ethernet
 allowlist.
 
+## Assembling it: `createConnectivityRepository()`
+
+```dart
+ConnectivityRepository createConnectivityRepository() =>
+    ConnectivityRepositoryImpl(
+      ConnectivityDataSourceImpl(),
+      ConnectivityMeteredDataSourceImpl(),
+    );
+```
+
+This package ships that wiring rather than leaving every consumer to
+re-derive it, unlike `preference_store`. `PreferenceRepository<T>` is a
+template — each domain (reader settings, TTS, …) instantiates it into its
+own shape, so there is no one correct wiring a package could hand back.
+`ConnectivityRepository` has no such variance: every consumer wants the
+exact same real data source and metered probe behind it, so the assembly
+belongs here once instead of copied into every app that depends on this
+package.
+
+It is still framework-agnostic — `createConnectivityRepository()` is a
+plain function, not a registration. Hand its *result* to whatever DI your
+app uses:
+
+```dart
+// get_it
+sl.registerLazySingleton<ConnectivityRepository>(createConnectivityRepository);
+
+// riverpod
+@riverpod
+ConnectivityRepository connectivityRepository(Ref ref) =>
+    createConnectivityRepository();
+```
+
 ## What this package does not do
 
-- **No DI wiring.** Register `ConnectivityRepositoryImpl` with whatever
-  service locator (or none) your app already uses — a constructor call, a
-  Riverpod provider, and a `get_it` registration all work the same way
-  against `ConnectivityRepository`.
 - **No app-specific policy.** "May a download start right now, given the
   user's Wi-Fi-only preference" is a decision an app makes over
   `ConnectivityStatus`, not something this package has an opinion on.

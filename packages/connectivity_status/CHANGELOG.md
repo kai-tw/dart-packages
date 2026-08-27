@@ -15,13 +15,24 @@ Initial extraction, from NovelGlide's connectivity system.
   has to wire up itself.
 - `GetConnectivityUseCase` / `ObserveConnectivityUseCase` — plain classes
   with a `call()` method, no shared `UseCase` base.
+- `createConnectivityRepository()` — the one correct wiring of the real data
+  source and metered probe behind `ConnectivityRepositoryImpl`, as a plain
+  function rather than a registration. Unlike `preference_store`'s
+  `PreferenceRepository<T>`, there is no per-consumer shape to leave open
+  here, so this package hands back the assembly instead of making every
+  consumer re-derive it. Still framework-agnostic: register the *result*
+  with whatever DI (`get_it`, Riverpod, none) your app already uses.
 
 Differences from the code it was extracted from:
 
 - `AppDownloadPolicyUseCase` (NovelGlide's "download over Wi-Fi only"
-  product policy) and `setupConnectivityDependencies()` (GetIt wiring) both
-  stayed behind — this package owns network-state plumbing, not one app's
-  policy over it or its DI convention.
+  product policy) stayed behind — this package owns network-state plumbing,
+  not one app's policy over it. `setupConnectivityDependencies()`
+  (NovelGlide's GetIt registration) also stayed behind, but the assembly it
+  did — building `ConnectivityRepositoryImpl` from the real adapters — is
+  now `createConnectivityRepository()`, so NovelGlide's own wiring shrinks to
+  one line registering that function, and CherishCRM's Riverpod provider can
+  call it directly.
 - The two use cases dropped their `extends UseCase<Return, Parameter>`
   inheritance from NovelGlide's app-local base class, so this package does
   not force a consumer into that convention.
