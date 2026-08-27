@@ -1,3 +1,4 @@
+import 'built_rules.dart';
 import 'lint_rule_base.dart';
 import 'rule_descriptor.dart';
 import 'rules/bloc/avoid_emit_after_await.dart';
@@ -5,7 +6,7 @@ import 'rules/bloc/avoid_repository_provider.dart';
 import 'rules/bloc/prefer_cubit_over_bloc.dart';
 import 'rules/bloc/prefer_named_subscription_callbacks.dart';
 import 'rules/bloc/require_cubit_suffix.dart';
-import 'rules/bloc/state_provides_copywith.dart';
+import 'rules/bloc/state_provides_copy_with.dart';
 import 'rules/clean_arch/avoid_freezed_in_domain.dart';
 import 'rules/clean_arch/avoid_layer_violation.dart';
 import 'rules/clean_arch/avoid_shared_preferences_outside_owner.dart';
@@ -32,20 +33,20 @@ import 'rules/core/avoid_void_async.dart';
 import 'rules/core/avoid_while_true.dart';
 import 'rules/core/public_class_names_its_file.dart';
 import 'rules/flutter/avoid_badge_wrapping_button.dart';
-import 'rules/flutter/avoid_buildcontext_in_snackbar.dart';
+import 'rules/flutter/avoid_build_context_in_snack_bar.dart';
 import 'rules/flutter/avoid_debug_only_api.dart';
 import 'rules/flutter/avoid_hardcoded_color.dart';
 import 'rules/flutter/avoid_listenable_mock.dart';
 import 'rules/flutter/avoid_media_query_of.dart';
 import 'rules/flutter/avoid_redundant_pop_callback.dart';
 import 'rules/flutter/avoid_reserved_widget_suffix.dart';
-import 'rules/getit/avoid_getit_dependency_cycle.dart';
+import 'rules/getit/avoid_get_it_dependency_cycle.dart';
 import 'rules/getit/restrict_sl_scope.dart';
 import 'rules/log_system/avoid_unsafe_log_interpolation.dart';
 import 'rules/log_system/log_error_requires_stacktrace.dart';
 import 'rules/novelglide/novelglide_analytics_param_namespace.dart';
 import 'rules/novelglide/novelglide_avoid_harness_support_imports_in_lib.dart';
-import 'rules/novelglide/novelglide_prefer_loadingstatecode_over_bool.dart';
+import 'rules/novelglide/novelglide_prefer_loading_state_code_over_bool.dart';
 import 'rules/novelglide/novelglide_require_design_mockup_guard.dart';
 
 /// Every rule this package ships, grouped into bundles.
@@ -501,17 +502,4 @@ class RuleRegistry {
 
     return BuiltRules(syntax: syntax, resolved: resolved, project: project);
   }
-}
-
-/// The rules in force for one area, split by the pass that runs them.
-class BuiltRules {
-  const BuiltRules({
-    required this.syntax,
-    required this.resolved,
-    required this.project,
-  });
-
-  final List<LintRule> syntax;
-  final List<ResolvedLintRule> resolved;
-  final List<ProjectLintRule> project;
 }

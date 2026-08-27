@@ -1,3 +1,19 @@
+## 3.0.1
+
+`src/form_components/datetime_picker_field.dart` split into three files, none
+of which matched the class it was originally named after:
+
+- `date_time_picker_controller.dart` — `DateTimePickerController`, on its own
+  since it shares no supertype with the widgets that were filed alongside it.
+- `date_time_picker_field_template.dart` — `DateTimePickerFieldTemplate` plus
+  its two concrete subtypes, `DateTimePickerField` and `DatePickerField`. The
+  file is named after the template, not either concrete widget, precisely
+  because both are its subtypes and neither is the other's.
+
+Not a breaking change — all four names still reach consumers through the
+`package:ui_kit/ui_kit.dart` barrel, which now exports the two new files
+instead of the one they replace.
+
 ## 3.0.0
 - **BREAKING** — `CommonStepIndicator` drops the `label` parameter and the
   `Text` it rendered above the segments. The widget is the segments now,

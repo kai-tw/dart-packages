@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.2
+
+`src/errors.dart` split into `src/hlc_decode_exception.dart` and
+`src/hlc_corrupted_exception.dart`, one class each. Both classes are
+unrelated leaf exceptions (each directly `implements Exception`, neither
+extends the other), so neither name matched `errors.dart` and there was no
+single-class rename that would have fixed it without immediately flagging
+the other.
+
+Not a breaking change — `HlcDecodeException` and `HlcCorruptedException`
+still reach consumers through the `package:hybrid_logical_clock/hybrid_logical_clock.dart`
+barrel, which now exports both new files instead of the one it replaces.
+
 ## 0.2.1
 
 Tests only — no API or behaviour change.

@@ -1,3 +1,45 @@
+## 0.4.3
+
+Dogfooding fixes: this package's own source tripped `public_class_names_its_file`
+in 9 places, surfaced once `dart run dart_lints` started running over
+`packages/*/lib/**` in CI. No rule logic changed — every fix is either a file
+rename or a file split, same as the fix this rule already prescribes to any
+other package's code.
+
+- **File splits** — a companion type moved out to its own file, leaving the
+  primary alone with the name that already matched:
+  - `LintRunResult` (`lint_runner.dart`) → `src/lint_run_result.dart`.
+  - `BuiltRules` (`rule_registry.dart`) → `src/built_rules.dart`.
+  - `ReservedSuffix` (`avoid_reserved_widget_suffix.dart`) →
+    `src/rules/flutter/reserved_suffix.dart`.
+  - `ProcessRunner` / `SystemProcessRunner` (`stock_analyzer_runner.dart`) →
+    `src/process_runner.dart` — an interface and its one implementation,
+    split from the class that consumes both via constructor injection.
+- **File renames**, class name unchanged — the file drifted from an
+  already-correct class name, not the other way around:
+  - `rules/bloc/state_provides_copywith.dart` →
+    `state_provides_copy_with.dart`.
+  - `rules/flutter/avoid_buildcontext_in_snackbar.dart` →
+    `avoid_build_context_in_snack_bar.dart`.
+  - `rules/getit/avoid_getit_dependency_cycle.dart` →
+    `avoid_get_it_dependency_cycle.dart`.
+  - `rules/novelglide/novelglide_prefer_loadingstatecode_over_bool.dart` →
+    `novelglide_prefer_loading_state_code_over_bool.dart`.
+- **New `exemptFiles` entry: `lint_rule_base.dart`.** This file is the rule
+  SDK's own vocabulary — `SourceEdit`, `LintFix`, `LintViolation`, `LintRule`,
+  `LintVisitor`, `ResolvedLintRule`, `ProjectUnit`, `ProjectLintRule`,
+  `ResolvedLintVisitor` — nine types with no shared prefix and no subtype
+  relation to fold under the rule's existing exemptions. Splitting it into
+  nine one-class files would scatter a vocabulary a rule author reads
+  together to satisfy a check whose actual purpose — a class findable from
+  its filename — this file was never failing at in practice; the exemption
+  says so explicitly rather than forcing the split anyway.
+
+None of this is a public API break: every renamed or split file was already
+`lib/src/`-internal, reached only through the `package:dart_lints/dart_lints.dart`
+barrel, which now re-exports `built_rules.dart`, `lint_run_result.dart` and
+`process_runner.dart` alongside the files it already exported.
+
 ## 0.4.2
 
 - Fix `avoid_static_only_class`: a class that participates in a type hierarchy

@@ -68,3 +68,12 @@ options:
       # this repo ever adds — the mismatch is the convention, not a typo.
       - _platform_interface.dart
       - _method_channel.dart
+      # dart_lints's own rule-authoring SDK: SourceEdit, LintFix,
+      # LintViolation, LintRule, LintVisitor, ResolvedLintRule, ProjectUnit,
+      # ProjectLintRule, ResolvedLintVisitor. None is a prefix or subtype of
+      # another, so the rule's existing "companion type has an owner"
+      # exemptions do not apply — but splitting nine tightly-coupled base
+      # types (a rule's return value, its violation model, its two visitor
+      # shapes) into nine files would scatter one vocabulary a rule author
+      # reads together, not fix a name that drifted from its file.
+      - lint_rule_base.dart

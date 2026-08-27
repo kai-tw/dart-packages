@@ -38,9 +38,7 @@ import '../../domain/loggable_exception.dart';
 /// another package — an HTTP client's exception, say — would make that package
 /// a dependency of every consumer, so [describeExtra] exists instead: the host
 /// app, which already has the dependency, supplies the one field worth keeping.
-class LogErrorRedactor {
-  LogErrorRedactor._();
-
+abstract final class LogErrorRedactor {
   /// Host-supplied describer for types this package cannot name.
   ///
   /// Set from `LogSystem.init`. Returns the field suffix only — the type name

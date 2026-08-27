@@ -101,7 +101,7 @@ class _Visitor extends ResolvedLintVisitor {
     }
   }
 
-  // debt: _extendsEquatable is duplicated in state_provides_copywith.dart —
+  // debt: _extendsEquatable is duplicated in state_provides_copy_with.dart —
   // extract a shared static helper onto ResolvedLintVisitor in lint_rule.dart.
   bool _extendsEquatable(ClassDeclaration node) {
     final List<InterfaceType>? supertypes =
