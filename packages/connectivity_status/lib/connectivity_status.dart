@@ -1,5 +1,4 @@
 export 'connectivity_status_platform_interface.dart';
-export 'src/create_connectivity_repository.dart';
 export 'src/data/connectivity_data_source.dart';
 export 'src/data/connectivity_data_source_impl.dart';
 export 'src/data/connectivity_metered_data_source.dart';

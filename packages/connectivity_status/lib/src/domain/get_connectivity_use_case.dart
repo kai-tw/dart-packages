@@ -1,3 +1,4 @@
+import '../data/connectivity_repository_impl.dart';
 import 'connectivity_repository.dart';
 import 'connectivity_status.dart';
 
@@ -14,6 +15,12 @@ import 'connectivity_status.dart';
 /// `preference_store` framework-agnostic.
 class GetConnectivityUseCase {
   const GetConnectivityUseCase(this._repository);
+
+  /// No DI framework? This is the zero-config path — wraps the shared
+  /// [ConnectivityRepositoryImpl.instance] instead of one you build and
+  /// pass in yourself.
+  factory GetConnectivityUseCase.shared() =>
+      GetConnectivityUseCase(ConnectivityRepositoryImpl.instance);
 
   final ConnectivityRepository _repository;
 

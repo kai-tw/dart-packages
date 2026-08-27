@@ -1,5 +1,6 @@
 import 'package:rxdart/rxdart.dart';
 
+import '../data/connectivity_repository_impl.dart';
 import 'connectivity_repository.dart';
 import 'connectivity_status.dart';
 
@@ -16,6 +17,11 @@ import 'connectivity_status.dart';
 /// [GetConnectivityUseCase] for why.
 class ObserveConnectivityUseCase {
   const ObserveConnectivityUseCase(this._repository);
+
+  /// No DI framework? This is the zero-config path — see
+  /// [GetConnectivityUseCase.shared].
+  factory ObserveConnectivityUseCase.shared() =>
+      ObserveConnectivityUseCase(ConnectivityRepositoryImpl.instance);
 
   final ConnectivityRepository _repository;
 

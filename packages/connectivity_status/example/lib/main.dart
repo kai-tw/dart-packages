@@ -2,17 +2,22 @@ import 'package:connectivity_status/connectivity_status.dart';
 import 'package:flutter/material.dart';
 
 void main() {
-  // Required before touching any platform channel — ConnectivityRepositoryImpl
-  // does exactly that at construction (it seeds itself from the connectivity
-  // and metered adapters immediately), so this must come first, not after
-  // runApp(), which would otherwise initialize the binding one line too late.
+  // Required before touching any platform channel — the shared
+  // ConnectivityRepositoryImpl.instance behind `.shared()` seeds itself
+  // from the connectivity and metered adapters immediately on first access,
+  // so this must come first, not after runApp(), which would otherwise
+  // initialize the binding one line too late.
   WidgetsFlutterBinding.ensureInitialized();
 
-  final ConnectivityRepository repository = createConnectivityRepository();
+  // This example has no DI framework of its own — `.shared()` is the
+  // zero-config path, wrapping ConnectivityRepositoryImpl.instance. A
+  // consumer using get_it or Riverpod would register
+  // ConnectivityRepositoryImpl.platform with its container instead and
+  // inject the result via the plain constructors.
   runApp(
     MyApp(
-      getConnectivity: GetConnectivityUseCase(repository),
-      observeConnectivity: ObserveConnectivityUseCase(repository),
+      getConnectivity: GetConnectivityUseCase.shared(),
+      observeConnectivity: ObserveConnectivityUseCase.shared(),
     ),
   );
 }

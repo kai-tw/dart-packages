@@ -10,10 +10,9 @@ contract, the `connectivity_plus` adapter, and the native metered-network
 probe. CherishCRM's onboarding flow is the second consumer.
 
 ```dart
-final ConnectivityRepository repository = createConnectivityRepository();
-
-final GetConnectivityUseCase getConnectivity = GetConnectivityUseCase(repository);
-final ObserveConnectivityUseCase observeConnectivity = ObserveConnectivityUseCase(repository);
+// No DI framework? .shared() wraps ConnectivityRepositoryImpl.instance.
+final GetConnectivityUseCase getConnectivity = GetConnectivityUseCase.shared();
+final ObserveConnectivityUseCase observeConnectivity = ObserveConnectivityUseCase.shared();
 
 final ConnectivityStatus now = await getConnectivity();
 observeConnectivity().listen((ConnectivityStatus status) {
@@ -45,14 +44,22 @@ genuine unmetered link. When the platform exposes no metered signal (desktop,
 web) or the probe faults, the repository falls back to a Wi-Fi/ethernet
 allowlist.
 
-## Assembling it: `createConnectivityRepository()`
+## Assembling it: two constructors, not a top-level function
 
 ```dart
-ConnectivityRepository createConnectivityRepository() =>
-    ConnectivityRepositoryImpl(
-      ConnectivityDataSourceImpl(),
-      ConnectivityMeteredDataSourceImpl(),
-    );
+class ConnectivityRepositoryImpl implements ConnectivityRepository {
+  ConnectivityRepositoryImpl(this._source, this._meteredSource) { ... }
+
+  /// The real platform wiring.
+  factory ConnectivityRepositoryImpl.platform() => ConnectivityRepositoryImpl(
+    ConnectivityDataSourceImpl(),
+    ConnectivityMeteredDataSourceImpl(),
+  );
+
+  /// Shared instance for a consumer with no DI framework — built once,
+  /// on first access.
+  static ConnectivityRepository get instance => ...;
+}
 ```
 
 This package ships that wiring rather than leaving every consumer to
@@ -64,19 +71,38 @@ exact same real data source and metered probe behind it, so the assembly
 belongs here once instead of copied into every app that depends on this
 package.
 
-It is still framework-agnostic — `createConnectivityRepository()` is a
-plain function, not a registration. Hand its *result* to whatever DI your
-app uses:
+Two constructors on the class itself, not a top-level function, so both
+paths stay discoverable from the type and neither reads as a global:
 
-```dart
-// get_it
-sl.registerLazySingleton<ConnectivityRepository>(createConnectivityRepository);
+- **`ConnectivityRepositoryImpl.platform()`** — a fresh instance every
+  call. Register *this* (a tear-off, not a call) with whatever DI your app
+  uses:
 
-// riverpod
-@riverpod
-ConnectivityRepository connectivityRepository(Ref ref) =>
-    createConnectivityRepository();
-```
+  ```dart
+  // get_it
+  sl.registerLazySingleton<ConnectivityRepository>(ConnectivityRepositoryImpl.platform);
+
+  // riverpod
+  @riverpod
+  ConnectivityRepository connectivityRepository(Ref ref) =>
+      ConnectivityRepositoryImpl.platform();
+  ```
+
+- **`ConnectivityRepositoryImpl.instance`** — the shared instance for an
+  app with no DI framework at all. `GetConnectivityUseCase.shared()` and
+  `ObserveConnectivityUseCase.shared()` wrap it, so the zero-config path
+  never needs to name `ConnectivityRepositoryImpl` directly:
+
+  ```dart
+  final getConnectivity = GetConnectivityUseCase.shared();
+  final observeConnectivity = ObserveConnectivityUseCase.shared();
+  ```
+
+  A consumer using a DI framework should register `.platform` with its
+  container and inject the result via the plain constructors
+  (`GetConnectivityUseCase(repository)`) instead of reading `.instance` —
+  that keeps the app's own container the one source of truth for the
+  instance, rather than two caches that could disagree.
 
 ## What this package does not do
 
