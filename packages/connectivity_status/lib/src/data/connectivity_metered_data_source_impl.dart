@@ -1,5 +1,4 @@
 import 'package:flutter/services.dart';
-import 'package:log_system/log_system.dart';
 
 import '../../connectivity_status_platform_interface.dart';
 import 'connectivity_metered_data_source.dart';
@@ -18,17 +17,12 @@ class ConnectivityMeteredDataSourceImpl
       return await ConnectivityStatusPlatform.instance
           .isActiveNetworkMetered()
           .timeout(_timeout);
-    } on MissingPluginException catch (e, stackTrace) {
+    } on MissingPluginException {
       // Platform-absence gate: desktop / web register no native handler, so a
       // missing plugin is the documented "no metered signal on this platform"
       // answer — the repository falls back to its type-list heuristic, not a
       // swallowed failure. Real mobile faults (PlatformException /
       // TimeoutException) are left to propagate to the repository.
-      LogSystem.debug(
-        'No metered channel handler on this platform',
-        error: e,
-        stackTrace: stackTrace,
-      );
       return null;
     }
   }

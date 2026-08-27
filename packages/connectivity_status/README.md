@@ -130,8 +130,8 @@ extensibility point.
 Requires `android.permission.ACCESS_NETWORK_STATE` on Android. iOS needs no
 extra entitlement.
 
-**Deployment floor:** this package's own dependency on `log_system` pulls in
-`firebase_crashlytics` / `firebase_core`, which require iOS 15 via Swift
-Package Manager — this package's podspec and `Package.swift` declare that
-floor accordingly. Every consumer this was built for (NovelGlide, CherishCRM)
-already targets iOS 15+.
+**Deployment floor:** iOS 13.0 — Flutter's own current floor, not something
+this package's native code needs on its own (`connectivity_plus` itself only
+requires 12.0). This package has no logging dependency of its own; a
+consumer that wants failures observed does so upstream, the same way it
+already observes its own errors.

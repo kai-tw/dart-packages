@@ -1,3 +1,28 @@
+## 0.1.1
+
+Dropped the `log_system` dependency. It was used only for diagnostic logging
+around three already-handled fallback paths (a construction-time seed
+fault, a stream error, a metered-probe fault/timeout) — each already
+degrades to a safe fallback value on its own; the log calls were pure
+observability, nothing in the control flow depended on them.
+
+This wasn't just a dependency trim: `log_system` is a workspace `path:`
+dependency, and an external consumer pulling `connectivity_status` via a
+`git:` dependency has no way to pin it to anything but the exact commit
+`log_system`'s own copy resolves to internally — no tag or branch works,
+only a raw SHA. A network-status package has no good reason to carry that
+constraint (or `log_system`'s own transitive `firebase_crashlytics` /
+`firebase_core` weight) at all, so it's gone rather than worked around.
+
+**Deployment floor drops to iOS 13.0** (was 15.0) — that floor existed only
+because `log_system` pulled in Firebase, which requires iOS 15 via Swift
+Package Manager. 13.0 is Flutter's own current floor; `connectivity_plus`
+itself needs only 12.0.
+
+Not a breaking change to this package's own public API — `LogSystem` was
+never part of it, only an internal implementation detail of
+`ConnectivityRepositoryImpl` and `ConnectivityMeteredDataSourceImpl`.
+
 ## 0.1.0
 
 Initial extraction, from NovelGlide's connectivity system.

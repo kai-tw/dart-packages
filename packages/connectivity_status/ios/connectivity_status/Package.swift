@@ -5,11 +5,10 @@ import PackageDescription
 
 let package = Package(
     name: "connectivity_status",
-    // Floor set by this package's own dependency on `log_system`, which
-    // pulls in firebase_crashlytics / firebase_core — both require iOS 15
-    // via Swift Package Manager.
+    // 13.0 is Flutter's own current floor, not something this package's
+    // native code needs — connectivity_plus itself only requires 12.0.
     platforms: [
-        .iOS("15.0")
+        .iOS("13.0")
     ],
     products: [
         .library(name: "connectivity-status", targets: ["connectivity_status"])

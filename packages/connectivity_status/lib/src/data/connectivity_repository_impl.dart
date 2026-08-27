@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/services.dart';
-import 'package:log_system/log_system.dart';
 import 'package:rxdart/rxdart.dart';
 
 import '../domain/connectivity_repository.dart';
@@ -55,12 +54,7 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
     // falling back to the construction-time `offline` seed on a probe fault.
     try {
       _subject.add(await getStatus());
-    } on PlatformException catch (e, s) {
-      LogSystem.error(
-        'Connectivity seed failed → fallback offline',
-        error: e,
-        stackTrace: s,
-      );
+    } on PlatformException {
       _subject.add(ConnectivityStatus.offline);
     }
 
@@ -74,13 +68,11 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
         .listen(_subject.add, onError: _onStreamError);
   }
 
-  void _onStreamError(Object error, StackTrace stackTrace) {
-    LogSystem.error(
-      'Connectivity adapter stream emitted error → keeping last known status',
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
+  // Keeps the last known status rather than forwarding the error onto
+  // [_subject] — this package has no logging dependency of its own, so a
+  // consumer that wants this surfaced observes it however it already
+  // observes its own errors, upstream of this repository.
+  void _onStreamError(Object error, StackTrace stackTrace) {}
 
   @override
   Future<ConnectivityStatus> getStatus() async {
@@ -128,25 +120,13 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
   Future<bool?> _readMetered() async {
     try {
       return await _meteredSource.isActiveNetworkMetered();
-    } on PlatformException catch (e, stackTrace) {
+    } on PlatformException {
       // Mobile metered probe faulted (e.g. a missing ACCESS_NETWORK_STATE
       // surfacing as a SecurityException) → degrade to the type-list heuristic
       // rather than fail the download gate.
-      LogSystem.warning(
-        'Metered probe failed → heuristic fallback',
-        error: e,
-        stackTrace: stackTrace,
-      );
       return null;
-    } on TimeoutException catch (e, stackTrace) {
-      // Probe outran its timeout → same heuristic fallback. Logged (not
-      // debug) because the probe is an instant OS read, so a timeout is a
-      // genuine anomaly: the gate is silently degrading to the heuristic.
-      LogSystem.warning(
-        'Metered probe timed out → heuristic fallback',
-        error: e,
-        stackTrace: stackTrace,
-      );
+    } on TimeoutException {
+      // Probe outran its timeout → same heuristic fallback.
       return null;
     }
   }
