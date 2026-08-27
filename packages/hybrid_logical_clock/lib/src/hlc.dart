@@ -1,6 +1,7 @@
 import 'package:clock/clock.dart';
 
-import 'errors.dart';
+import 'hlc_corrupted_exception.dart';
+import 'hlc_decode_exception.dart';
 
 /// Hybrid Logical Clock value type.
 ///

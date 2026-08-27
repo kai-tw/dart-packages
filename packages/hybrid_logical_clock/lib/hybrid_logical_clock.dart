@@ -22,8 +22,9 @@
 /// storage interface. A sync layer built on it supplies all of that itself.
 library;
 
-export 'src/errors.dart';
 export 'src/field_hlcs.dart';
 export 'src/hlc.dart';
 export 'src/hlc_clock.dart';
+export 'src/hlc_corrupted_exception.dart';
+export 'src/hlc_decode_exception.dart';
 export 'src/hlc_dto.dart';

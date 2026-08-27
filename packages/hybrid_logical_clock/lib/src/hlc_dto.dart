@@ -1,7 +1,7 @@
 import 'package:clock/clock.dart';
 
-import 'errors.dart';
 import 'hlc.dart';
+import 'hlc_corrupted_exception.dart';
 
 /// JSON wire format for [Hlc] embedded inside other DTOs.
 ///
