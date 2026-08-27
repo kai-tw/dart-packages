@@ -38,7 +38,7 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.kai_wu.connectivity_status
+        package: net.kaiwu.connectivity_status
         pluginClass: ConnectivityStatusPlugin
       ios:
         pluginClass: ConnectivityStatusPlugin

@@ -11,7 +11,7 @@ import 'connectivity_status_platform_interface.dart';
 class MethodChannelConnectivityStatus extends ConnectivityStatusPlatform {
   /// Package-owned and neutral on purpose: a shared package's channel name
   /// must not carry one consuming app's identity.
-  static const String channelName = 'com.kai_wu.connectivity_status/metered';
+  static const String channelName = 'net.kaiwu.connectivity_status/metered';
 
   @visibleForTesting
   final MethodChannel methodChannel = const MethodChannel(channelName);

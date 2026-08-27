@@ -1,4 +1,4 @@
-package com.kai_wu.connectivity_status_example
+package net.kaiwu.connectivity_status_example
 
 import io.flutter.embedding.android.FlutterActivity
 

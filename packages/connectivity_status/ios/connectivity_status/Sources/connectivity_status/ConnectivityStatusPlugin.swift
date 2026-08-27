@@ -6,7 +6,7 @@ import UIKit
 
 /// Exposes the OS metered capability (`NWPath.isExpensive`, which reflects
 /// the underlying transport even when a VPN masks it) over the
-/// `com.kai_wu.connectivity_status/metered` MethodChannel.
+/// `net.kaiwu.connectivity_status/metered` MethodChannel.
 ///
 /// Registered automatically by `GeneratedPluginRegistrant` — no manual
 /// call needed in a consuming app's `AppDelegate`. Each query spins up a
@@ -16,7 +16,7 @@ import UIKit
 public class ConnectivityStatusPlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
-      name: "com.kai_wu.connectivity_status/metered",
+      name: "net.kaiwu.connectivity_status/metered",
       binaryMessenger: registrar.messenger()
     )
     let instance = ConnectivityStatusPlugin()
@@ -35,7 +35,7 @@ public class ConnectivityStatusPlugin: NSObject, FlutterPlugin {
   /// `NWPathMonitor`, then tears it down.
   private static func readMetered(result: @escaping FlutterResult) {
     let monitor = NWPathMonitor()
-    let queue = DispatchQueue(label: "com.kai_wu.connectivity_status.metered")
+    let queue = DispatchQueue(label: "net.kaiwu.connectivity_status.metered")
     var replied = false
 
     monitor.pathUpdateHandler = { path in

@@ -1,4 +1,4 @@
-package com.kai_wu.connectivity_status
+package net.kaiwu.connectivity_status
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -11,7 +11,7 @@ import io.flutter.plugin.common.MethodChannel.Result
 /** Exposes the OS metered capability
  *  (`ConnectivityManager.isActiveNetworkMetered`, which reflects the
  *  underlying transport even when a VPN masks it) over the
- *  `com.kai_wu.connectivity_status/metered` MethodChannel.
+ *  `net.kaiwu.connectivity_status/metered` MethodChannel.
  *
  *  Requires `android.permission.ACCESS_NETWORK_STATE`. Registered
  *  automatically by `GeneratedPluginRegistrant` — no manual call needed in
@@ -26,7 +26,7 @@ class ConnectivityStatusPlugin :
         context = flutterPluginBinding.applicationContext
         channel = MethodChannel(
             flutterPluginBinding.binaryMessenger,
-            "com.kai_wu.connectivity_status/metered",
+            "net.kaiwu.connectivity_status/metered",
         )
         channel.setMethodCallHandler(this)
     }

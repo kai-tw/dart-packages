@@ -27,8 +27,10 @@ Differences from the code it was extracted from:
   not force a consumer into that convention.
 - The metered probe's platform channel is renamed from
   `com.kai_wu.novelglide/connectivity_metered` to
-  `com.kai_wu.connectivity_status/metered` — a shared package's channel name
-  must not carry one consuming app's identity.
+  `net.kaiwu.connectivity_status/metered` — a shared package's channel name
+  must not carry one consuming app's identity, and `net.kaiwu` (not
+  `com.kai_wu`) is the current org identifier, matching CherishCRM's
+  Android namespace and iOS bundle identifier.
 - The native Swift/Kotlin, previously loose files manually registered from
   each app's `AppDelegate` / `MainActivity`, is now a proper federated
   plugin. `GeneratedPluginRegistrant` wires it automatically; no consumer

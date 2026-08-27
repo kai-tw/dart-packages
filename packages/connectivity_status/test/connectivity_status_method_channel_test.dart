@@ -31,7 +31,7 @@ void main() {
   test('channel name is package-owned and neutral', () {
     expect(
       MethodChannelConnectivityStatus.channelName,
-      'com.kai_wu.connectivity_status/metered',
+      'net.kaiwu.connectivity_status/metered',
     );
   });
 }

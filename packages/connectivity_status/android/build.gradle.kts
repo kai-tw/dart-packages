@@ -1,4 +1,4 @@
-group = "com.kai_wu.connectivity_status"
+group = "net.kaiwu.connectivity_status"
 version = "1.0-SNAPSHOT"
 
 buildscript {
@@ -26,7 +26,7 @@ plugins {
 }
 
 android {
-    namespace = "com.kai_wu.connectivity_status"
+    namespace = "net.kaiwu.connectivity_status"
 
     compileSdk = 36
 
