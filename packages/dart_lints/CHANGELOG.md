@@ -1,3 +1,58 @@
+## 0.4.0
+
+- New `public_class_names_its_file` in the `core` bundle: one principle —
+  **a file is named by the one public class it declares** — from which both
+  halves follow. A second, unrelated public class means the filename names
+  only part of what is inside, so neither class can be found by the name it
+  is used under; a name that does not match means the file cannot be reached
+  from the class at all. Grep-by-symbol is how a codebase of this size is
+  navigated, and it degrades silently: nobody notices the file they failed to
+  find.
+
+  It also catches a typo class for free. `DownloaderManagerTaskListItemIcon`
+  declared in `download_manager_task_list_item_icon.dart` reads as correct at
+  every call site — the drift from its own feature name is visible only
+  against the filename.
+
+  Four exemptions, because the target is an unowned sibling, not co-location
+  as such. A class whose name **starts with** the primary's is part of its
+  contract (`ReaderGotoUseCase` + `ReaderGotoUseCaseParam`). A **subtype** of
+  the primary is exempt because Dart *requires* a `sealed` hierarchy to share
+  a library — the alternative is not a stricter codebase, it is `part` files.
+  `acronyms` settles the house spelling of a compound token (`WebView` →
+  `webview` rather than `web_view`); the rule does not decide which spelling
+  is right, only that one is used. `familyFileSuffixes` marks files that
+  deliberately hold a family rather than a class (`bookmark_exceptions.dart`)
+  — still checked, in that a family file may hold only **one** family: two
+  unrelated bases in it still report.
+
+  Measured against NovelGlide's `lib/`: 1248 files declare a public class,
+  1200 already comply, and 48 report — 9 filenames that no class answers to
+  and 39 unowned siblings. Enums, mixins and extensions are out of scope;
+  they accompany the class they serve far more often than they head a file,
+  and folding them in would make the common case the exception.
+
+- New `avoid_static_only_class` in the `core` bundle: reports a class where
+  every non-constructor member is `static`. The stock
+  `avoid_classes_with_only_static_members` lets the most common shape of the
+  antipattern through, because **any** constructor exempts the class — so
+  `class X { X._(); static void a() {} }`, a private constructor added
+  specifically to block instantiation, reads to it as "has a constructor"
+  rather than "holds no instance state at all".
+
+  A bare `abstract` class with no constructor is exempt: the language already
+  refuses to instantiate it, so there is no redundant workaround to close.
+  One that declares a constructor anyway is still reported.
+
+  Note it interacts with `avoid_top_level_identifiers`, whose prescribed fix
+  is the shape this rule forbids. Running both is coherent only if the fix
+  taken is the real one — an extension method, the entity the member
+  describes, or an enum for a closed set — rather than a namespace class.
+
+Both rules land in `core`, so a project already enabling that bundle turns
+them on the moment it bumps this pin. Neither is auto-fixable; both name the
+move in the violation message.
+
 ## 0.3.0
 
 - New `avoid_multi_document_dartdoc` in the `core` bundle: flags a dartdoc

@@ -22,6 +22,7 @@ import 'rules/core/avoid_lint_suppression.dart';
 import 'rules/core/avoid_multi_document_dartdoc.dart';
 import 'rules/core/avoid_production_null_assertion.dart';
 import 'rules/core/avoid_record_types.dart';
+import 'rules/core/avoid_static_only_class.dart';
 import 'rules/core/avoid_then_in_async.dart';
 import 'rules/core/avoid_throwing_generic_exception.dart';
 import 'rules/core/avoid_top_level_identifiers.dart';
@@ -29,6 +30,7 @@ import 'rules/core/avoid_unawaited_catch_error.dart';
 import 'rules/core/avoid_unnecessary_rethrow.dart';
 import 'rules/core/avoid_void_async.dart';
 import 'rules/core/avoid_while_true.dart';
+import 'rules/core/public_class_names_its_file.dart';
 import 'rules/flutter/avoid_badge_wrapping_button.dart';
 import 'rules/flutter/avoid_buildcontext_in_snackbar.dart';
 import 'rules/flutter/avoid_debug_only_api.dart';
@@ -124,6 +126,13 @@ class RuleRegistry {
       create: (Map<String, Object?> o) => AvoidRecordTypes(),
     ),
     RuleDescriptor(
+      name: 'avoid_static_only_class',
+      bundle: 'core',
+      options: <String, OptionKind>{'exemptFiles': OptionKind.stringList},
+      create: (Map<String, Object?> o) =>
+          AvoidStaticOnlyClass(exemptFiles: o['exemptFiles'] as List<String>?),
+    ),
+    RuleDescriptor(
       name: 'avoid_then_in_async',
       bundle: 'core',
       create: (Map<String, Object?> o) => AvoidThenInAsync(),
@@ -168,6 +177,20 @@ class RuleRegistry {
       name: 'avoid_while_true',
       bundle: 'core',
       create: (Map<String, Object?> o) => AvoidWhileTrue(),
+    ),
+    RuleDescriptor(
+      name: 'public_class_names_its_file',
+      bundle: 'core',
+      options: <String, OptionKind>{
+        'acronyms': OptionKind.stringList,
+        'exemptFiles': OptionKind.stringList,
+        'familyFileSuffixes': OptionKind.stringList,
+      },
+      create: (Map<String, Object?> o) => PublicClassNamesItsFile(
+        acronyms: o['acronyms'] as List<String>?,
+        exemptFiles: o['exemptFiles'] as List<String>?,
+        familyFileSuffixes: o['familyFileSuffixes'] as List<String>?,
+      ),
     ),
     RuleDescriptor(
       name: 'avoid_badge_wrapping_button',
