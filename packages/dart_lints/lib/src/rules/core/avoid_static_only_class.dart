@@ -25,6 +25,20 @@ import '../../lint_rule_base.dart';
 /// private `X._()` — is still reported: the constructor does nothing there
 /// but confirm the class was never going to be a real unit of behavior.
 ///
+/// **A class that participates in a type hierarchy is also exempt**, however
+/// static its own declared members look. `extends` and `with` bring instance
+/// members this syntactic visitor cannot see — freezed's `with _$X` supplies
+/// `==`, `copyWith` and `toJson`, so a freezed data type carrying one static
+/// pre-decode validator reads as all-static from the AST alone. A class that
+/// something in the same file extends is the other direction: a hierarchy
+/// root, whose constructor exists for its subclasses' `super()` calls rather
+/// than to block instantiation. Dart requires every subtype of a `sealed`
+/// class to live in that class's library, so scanning the file settles the
+/// sealed case exhaustively rather than heuristically — and a `sealed` class
+/// cannot take the bare-`abstract` exemption above, because `abstract sealed
+/// class` is a compile error ("a 'sealed' class can't be marked 'abstract'
+/// because it's already implicitly abstract").
+///
 /// **The fix for what remains is not a private constructor** — that only
 /// stops instantiation, it does not give the members anywhere better to
 /// live. Move each member onto the type it actually describes, or fold a
@@ -104,6 +118,27 @@ class _Visitor extends LintVisitor {
 
   final List<String> exemptFiles;
 
+  /// Every name some class in this file `extends`.
+  ///
+  /// Collected once per unit so a hierarchy root can recognise itself: the
+  /// root is reported before its subclasses are visited, so asking "does
+  /// anything extend me?" needs the whole file already in hand.
+  Set<String> _extendedInUnit = const <String>{};
+
+  @override
+  void visitCompilationUnit(CompilationUnit node) {
+    final Set<String> extended = <String>{};
+    for (final ClassDeclaration c
+        in node.declarations.whereType<ClassDeclaration>()) {
+      final ExtendsClause? extendsClause = c.extendsClause;
+      if (extendsClause != null) {
+        extended.add(extendsClause.superclass.name.lexeme);
+      }
+    }
+    _extendedInUnit = extended;
+    super.visitCompilationUnit(node);
+  }
+
   @override
   void visitClassDeclaration(ClassDeclaration node) {
     if (exemptFiles.any(filePath.endsWith)) {
@@ -139,7 +174,20 @@ class _Visitor extends LintVisitor {
     final bool isUnclosableWithoutWorkaround =
         node.abstractKeyword != null && !hasConstructor;
 
-    if (hasMember && allStatic && !isUnclosableWithoutWorkaround) {
+    // A class wired into a type hierarchy is not a filing cabinet. `extends`
+    // and `with` carry instance members this syntactic visitor cannot see
+    // (freezed's `with _$X` is the common case); being extended by something
+    // in this file makes it a base, whose constructor serves `super()` calls
+    // rather than blocking instantiation.
+    final bool participatesInHierarchy =
+        node.extendsClause != null ||
+        node.withClause != null ||
+        _extendedInUnit.contains(node.name.lexeme);
+
+    if (hasMember &&
+        allStatic &&
+        !isUnclosableWithoutWorkaround &&
+        !participatesInHierarchy) {
       report(
         ruleName: 'avoid_static_only_class',
         message:

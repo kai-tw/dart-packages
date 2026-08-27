@@ -1,3 +1,35 @@
+## 0.4.2
+
+- Fix `avoid_static_only_class`: a class that participates in a type hierarchy
+  is no longer reported, however static its own declared members look. The
+  rule was reading three genuine units of behavior as filing cabinets.
+
+  `extends` and `with` bring instance members a syntactic visitor cannot see.
+  Freezed is the common case — `abstract class X with _$X` receives `==`,
+  `copyWith` and `toJson` through the mixin, so a freezed data type carrying a
+  single static pre-decode validator read as all-static from the AST alone.
+  The same held for a widget subclass whose only declared members are the
+  static helpers its initializer list needs, `super(...)` running before any
+  instance method exists to call.
+
+  The third shape had no escape at all. The rule's prescribed exemption is
+  bare `abstract`, and a `sealed` class cannot take it: `abstract sealed
+  class` is a compile error ("a 'sealed' class can't be marked 'abstract'
+  because it's already implicitly abstract"). A sealed root holding a static
+  factory over its own family was therefore reported with no shape available
+  to satisfy the message. Being extended by something in the same file now
+  exempts a class as a hierarchy root — its constructor serves its subclasses'
+  `super()` calls rather than blocking instantiation — and because Dart
+  requires every subtype of a `sealed` class to live in that class's library,
+  scanning the file settles the sealed case exhaustively rather than
+  heuristically.
+
+  The exemption stays narrow. A `sealed` or `abstract` class that nothing in
+  its file extends is a root with no hierarchy under it, still a namespace and
+  still reported; so is a subclass whose own members are all static, because
+  being *in* a hierarchy is not the same as being the root of one. Found by a
+  consumer auditing 36 hits, of which these 8 were false positives.
+
 ## 0.4.1
 
 - Fix `public_class_names_its_file`: the subtype exemption now walks the

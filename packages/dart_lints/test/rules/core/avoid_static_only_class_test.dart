@@ -56,9 +56,28 @@ abstract final class DebounceKeys {
       },
     );
 
-    test('[partition] sealed', () {
-      expect(_lint('sealed class X { static void a() {} }'), hasLength(1));
-    });
+    test(
+      '[partition] sealed, with nothing in the file extending it — a root '
+      'with no hierarchy under it is still just a namespace',
+      () {
+        expect(_lint('sealed class X { static void a() {} }'), hasLength(1));
+      },
+    );
+
+    test(
+      '[error-guessing] a subclass that is itself static-only still reports '
+      '— being IN a hierarchy is not the same as being a root of one',
+      () {
+        expect(
+          _lint(
+            'sealed class Base { const Base(); }\n'
+            'final class Leaf extends Base { const Leaf(); }\n'
+            'class Bag { Bag._(); static void a() {} }',
+          ),
+          hasLength(1),
+        );
+      },
+    );
 
     test('[partition] base', () {
       expect(_lint('base class X { static void a() {} }'), hasLength(1));
@@ -153,6 +172,73 @@ abstract final class DebounceKeys {
         _lint('class X { X._(); int a = 1; static void b() {} }'),
         isEmpty,
       );
+    });
+
+    test(
+      '[boundary] a freezed data type with one static pre-decode validator '
+      '— `==`, `copyWith` and `toJson` arrive through `with _\$X`, so the '
+      'AST alone cannot see that this class has any instance member',
+      () {
+        expect(
+          _lint('''
+abstract class UiFontManifestEntryDto with _\$UiFontManifestEntryDto {
+  const factory UiFontManifestEntryDto({required String family}) =
+      _UiFontManifestEntryDto;
+
+  static bool hasWellFormedEnvelope(Map<String, dynamic> json) =>
+      json['family'] is String;
+}
+'''),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      '[boundary] a widget subclass whose only declared members are the '
+      'static helpers an initializer list needs — `super(...)` runs before '
+      'any instance method exists, so these cannot be instance methods',
+      () {
+        expect(
+          _lint('''
+class TrashNoticeSnackBar extends IconMessageSnackBar {
+  TrashNoticeSnackBar({super.key}) : super(margin: _readerMargin);
+
+  static const EdgeInsets _readerMargin = EdgeInsets.all(8);
+}
+'''),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      '[boundary] a sealed root with its family in the same file — the '
+      'const constructor serves the subclasses’ `super()` calls, and '
+      'Dart forces every subtype into this library so the file is the '
+      'whole answer',
+      () {
+        expect(
+          _lint('''
+sealed class FileAssociationStageResult {
+  const FileAssociationStageResult();
+
+  static FileAssociationStageResult fromChannelMap(Map<Object?, Object?>? r) =>
+      const FileAssociationStageStaged('');
+}
+
+final class FileAssociationStageStaged extends FileAssociationStageResult {
+  const FileAssociationStageStaged(this.path);
+  final String path;
+}
+'''),
+          isEmpty,
+        );
+      },
+    );
+
+    test('[partition] a plain class mixing in a mixin', () {
+      expect(_lint('class X with M { static void a() {} }'), isEmpty);
     });
   });
 
