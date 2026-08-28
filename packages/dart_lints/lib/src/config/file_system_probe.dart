@@ -9,6 +9,9 @@ abstract class FileSystemProbe {
 
   /// Every `.dart` file under [rootDirectory], as POSIX paths relative to it.
   List<String> dartFilesUnder(String rootDirectory);
+
+  /// The contents of [path], or null if it does not exist or cannot be read.
+  String? readFile(String path);
 }
 
 class SystemFileSystemProbe implements FileSystemProbe {
@@ -27,6 +30,15 @@ class SystemFileSystemProbe implements FileSystemProbe {
   bool exists(String path) =>
       FileSystemEntity.isDirectorySync(path) ||
       FileSystemEntity.isFileSync(path);
+
+  @override
+  String? readFile(String path) {
+    try {
+      return File(path).readAsStringSync();
+    } on FileSystemException {
+      return null;
+    }
+  }
 
   @override
   List<String> dartFilesUnder(String rootDirectory) {

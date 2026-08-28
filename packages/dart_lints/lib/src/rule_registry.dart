@@ -273,11 +273,13 @@ class RuleRegistry {
         'featureRoots': OptionKind.stringList,
         'layers': OptionKind.stringList,
         'exemptFiles': OptionKind.stringList,
+        'packageName': OptionKind.string,
       },
       create: (Map<String, Object?> o) => AvoidLayerViolation(
         featureRoots: o['featureRoots'] as List<String>?,
         layers: o['layers'] as List<String>?,
         exemptFiles: o['exemptFiles'] as List<String>?,
+        packageName: o['packageName'] as String?,
       ),
     ),
     RuleDescriptor(

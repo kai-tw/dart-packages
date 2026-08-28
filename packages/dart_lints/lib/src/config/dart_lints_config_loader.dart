@@ -69,9 +69,9 @@ class DartLintsConfigLoader {
     );
 
     final Set<String> globalRules = _globalRuleSet(document, configPath);
-    final Map<String, Map<String, Object?>> options = _options(
-      document['options'],
-      configPath,
+    final Map<String, Map<String, Object?>> options = _withPackageNameDefault(
+      _options(document['options'], configPath),
+      _pubspecPackageName(root),
     );
     final List<Area> areas = _areas(
       document['areas'],
@@ -229,6 +229,58 @@ class DartLintsConfigLoader {
       );
     }
     return areas;
+  }
+
+  /// `avoid_layer_violation` needs the project's own package name to tell a
+  /// self `package:` import (subject to the layer rules) from a dependency's
+  /// (never subject to them) — without it, every `package:` import reads as
+  /// external and the rule never fires. Reading it from the same
+  /// `pubspec.yaml` `dart_lints.yaml` already sits beside means a consuming
+  /// project gets a working rule for free; `options.avoid_layer_violation`
+  /// still overrides this if a workspace member's own name differs from the
+  /// config root's.
+  Map<String, Map<String, Object?>> _withPackageNameDefault(
+    Map<String, Map<String, Object?>> options,
+    String? packageName,
+  ) {
+    if (packageName == null) {
+      return options;
+    }
+    final Map<String, Object?> existing =
+        options['avoid_layer_violation'] ?? const <String, Object?>{};
+    if (existing.containsKey('packageName')) {
+      return options;
+    }
+    return <String, Map<String, Object?>>{
+      ...options,
+      'avoid_layer_violation': <String, Object?>{
+        ...existing,
+        'packageName': packageName,
+      },
+    };
+  }
+
+  /// The `name:` field of `<root>/pubspec.yaml`, or null when the file is
+  /// missing, unreadable, unparsable, or declares no name — every case is a
+  /// silent pass-through here rather than a thrown [DartLintsConfigException],
+  /// because a missing name only weakens one rule's default rather than
+  /// invalidating the whole configuration.
+  String? _pubspecPackageName(String root) {
+    final String? text = probe.readFile(p.join(root, 'pubspec.yaml'));
+    if (text == null) {
+      return null;
+    }
+    final Object? document;
+    try {
+      document = loadYaml(text);
+    } on YamlException {
+      return null;
+    }
+    if (document is! YamlMap) {
+      return null;
+    }
+    final Object? name = document['name'];
+    return name is String ? name : null;
   }
 
   Map<String, Map<String, Object?>> _options(Object? node, String configPath) {

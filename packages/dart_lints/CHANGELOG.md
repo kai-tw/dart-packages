@@ -1,3 +1,28 @@
+## 0.4.5
+
+`avoid_layer_violation` never actually fired in any project that requires
+`package:` imports — which is most of them. It compared the raw import URI
+against a `lib/features/<feature>/<layer>/` path pattern, but no import URI
+ever contains a literal `lib/`: a relative import omits the whole prefix, and
+`package:` replaces it with the package name
+(`package:myapp/features/x/domain/y.dart`, never
+`package:myapp/lib/features/x/domain/y.dart`). Every cross-layer `package:`
+import read as a no-op, silently — the rule reported nothing to say it had
+never actually engaged, so it looked like a clean pass on codebases that had
+never once been checked.
+
+Fixed by giving `AvoidLayerViolation` a `packageName` so it can tell a self
+`package:<name>/...` import (subject to the layer rules) from a dependency's
+(never subject to them) and resolve the self case back to a `lib/`-relative
+path before comparing. Relative imports are now resolved against the
+importing file's own directory the same way. `DartLintsConfigLoader` reads
+`packageName` from the project's own `pubspec.yaml` automatically, so an
+existing `dart_lints.yaml` needs no changes to pick this up — `enable:
+[avoid_layer_violation]` or the `clean_arch` bundle alone is enough for the
+rule to start finding real violations it was always supposed to catch.
+`options.avoid_layer_violation.packageName` still overrides the default,
+for a pub workspace member whose own name differs from the config root.
+
 ## 0.4.4
 
 `avoid_top_level_identifiers`'s own suggested fix was telling authors to
