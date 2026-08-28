@@ -1,4 +1,5 @@
 export 'connectivity_status_platform_interface.dart';
+export 'src/domain/connectivity_error.dart';
 export 'src/domain/connectivity_repository.dart';
 export 'src/domain/connectivity_status.dart';
 export 'src/domain/get_connectivity_use_case.dart';

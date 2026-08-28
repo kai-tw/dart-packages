@@ -33,6 +33,10 @@ class _FakeRepository implements ConnectivityRepository {
   final BehaviorSubject<ConnectivityStatus> _subject;
 
   @override
+  Stream<ConnectivityError> get errors =>
+      const Stream<ConnectivityError>.empty();
+
+  @override
   Future<ConnectivityStatus> getStatus() async => _subject.value;
 
   @override

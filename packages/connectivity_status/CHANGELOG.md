@@ -1,3 +1,45 @@
+## 0.2.0
+
+**BREAKING** — `ConnectivityRepository.instance` and `.resetInstance()` are
+gone, replaced by a plain factory constructor: `ConnectivityRepository()`
+builds a fully-wired repository backed by the real platform adapters, and
+this package takes no further view on whether the result is a singleton.
+A device has exactly one real network state, but nothing about that
+requires the *package* to enforce a single shared object — that's a DI
+decision, and DI decisions belong to the app. Migrate:
+
+```dart
+// before
+final repo = ConnectivityRepository.instance;
+
+// after — build once, pass it down (or register the constructor with
+// get_it / Riverpod exactly as you would any other dependency)
+final repo = ConnectivityRepository();
+```
+
+**BREAKING** — `GetConnectivityUseCase.shared()` and
+`ObserveConnectivityUseCase.shared()` are gone with it — there is no more
+package-owned instance for them to wrap. Construct the repository once and
+pass it to the plain constructors instead:
+
+```dart
+// before
+final getConnectivity = GetConnectivityUseCase.shared();
+
+// after
+final connectivity = ConnectivityRepository();
+final getConnectivity = GetConnectivityUseCase(connectivity);
+```
+
+**New: `ConnectivityRepository.errors`.** A `Stream<ConnectivityError>` of
+every non-fatal fault this package catches internally — a seed probe
+fault, an adapter stream error, a metered-probe fault or timeout. Each
+already has a safe fallback in effect by the time it's emitted; this
+exists purely so a consumer can log or react to it however it already
+does for its own errors (this package has no logging dependency of its
+own — see 0.1.1). Never emitted for an expected platform absence
+(desktop / web registering no metered handler); that isn't a failure.
+
 ## 0.1.1
 
 Dropped the `log_system` dependency. It was used only for diagnostic logging

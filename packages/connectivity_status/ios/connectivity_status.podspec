@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'connectivity_status'
-  s.version          = '0.1.0'
+  s.version          = '0.2.0'
   s.summary          = "The device's network state as one value, with a metered/unmetered distinction."
   s.description      = <<-DESC
 Reads the OS-level metered-network capability (NWPath.isExpensive) behind a

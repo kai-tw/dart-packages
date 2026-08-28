@@ -15,12 +15,6 @@ import 'connectivity_status.dart';
 class GetConnectivityUseCase {
   const GetConnectivityUseCase(this._repository);
 
-  /// No DI framework? This is the zero-config path — wraps the shared
-  /// [ConnectivityRepository.instance] instead of one you build and pass
-  /// in yourself.
-  factory GetConnectivityUseCase.shared() =>
-      GetConnectivityUseCase(ConnectivityRepository.instance);
-
   final ConnectivityRepository _repository;
 
   Future<ConnectivityStatus> call() => _repository.getStatus();

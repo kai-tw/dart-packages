@@ -2,21 +2,29 @@ import 'package:connectivity_status/connectivity_status.dart';
 import 'package:flutter/material.dart';
 
 void main() {
-  // Required before touching any platform channel — the shared
-  // ConnectivityRepository.instance behind `.shared()` seeds itself from
-  // the connectivity and metered adapters immediately on first access, so
-  // this must come first, not after runApp(), which would otherwise
-  // initialize the binding one line too late.
+  // Required before touching any platform channel — building the
+  // repository below seeds itself from the connectivity and metered
+  // adapters immediately, so this must come first, not after runApp(),
+  // which would otherwise initialize the binding one line too late.
   WidgetsFlutterBinding.ensureInitialized();
 
-  // This example has no DI framework of its own — `.shared()` is the
-  // zero-config path, wrapping ConnectivityRepository.instance. A consumer
-  // using get_it or Riverpod would register that same instance with its
-  // container instead and inject the result via the plain constructors.
+  // This example has no DI framework of its own — build the repository
+  // once here and pass it into both use cases. A consumer using get_it or
+  // Riverpod would register this same construction with its container
+  // instead and inject the result via the plain constructors.
+  final ConnectivityRepository connectivity = ConnectivityRepository();
+
+  // This package has no logging dependency of its own — errors are just a
+  // stream. debugPrint here stands in for whatever an app already uses
+  // (log_system, Crashlytics, ...).
+  connectivity.errors.listen(
+    (ConnectivityError error) => debugPrint(error.toString()),
+  );
+
   runApp(
     MyApp(
-      getConnectivity: GetConnectivityUseCase.shared(),
-      observeConnectivity: ObserveConnectivityUseCase.shared(),
+      getConnectivity: GetConnectivityUseCase(connectivity),
+      observeConnectivity: ObserveConnectivityUseCase(connectivity),
     ),
   );
 }

@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:rxdart/rxdart.dart';
 
+import '../domain/connectivity_error.dart';
 import '../domain/connectivity_repository.dart';
 import '../domain/connectivity_status.dart';
 import 'connectivity_data_source.dart';
@@ -12,32 +13,21 @@ import 'connectivity_metered_data_source.dart';
 import 'connectivity_metered_data_source_impl.dart';
 
 /// Internal to this package — never exported. Reach this only through
-/// [ConnectivityRepository.instance]; a consumer that spelled this class
-/// name directly would have coupled to the implementation instead of the
-/// contract.
+/// [ConnectivityRepository]'s factory constructor; a consumer that spelled
+/// this class name directly would have coupled to the implementation
+/// instead of the contract.
 class ConnectivityRepositoryImpl implements ConnectivityRepository {
   ConnectivityRepositoryImpl(this._source, this._meteredSource) {
     _seedAndForward();
   }
 
-  static ConnectivityRepository? _instance;
-
-  /// Backs [ConnectivityRepository.instance]. The real platform wiring —
-  /// [ConnectivityDataSourceImpl] and [ConnectivityMeteredDataSourceImpl] —
-  /// built once, on first access.
-  static ConnectivityRepository get instance =>
-      _instance ??= ConnectivityRepositoryImpl(
-        ConnectivityDataSourceImpl(),
-        ConnectivityMeteredDataSourceImpl(),
-      );
-
-  /// Backs [ConnectivityRepository.resetInstance] — unrestricted here since
-  /// this class is already `src/`-internal; the `@visibleForTesting` gate
-  /// that matters lives on the public-facing forwarding member instead
-  /// (annotating both would make the interface's own forwarding call a
-  /// cross-file use of a restricted member, which the analyzer flags even
-  /// though the caller is exactly as restricted as the callee).
-  static void resetInstance() => _instance = null;
+  /// Backs [ConnectivityRepository]'s factory constructor — the real
+  /// platform wiring, [ConnectivityDataSourceImpl] and
+  /// [ConnectivityMeteredDataSourceImpl].
+  factory ConnectivityRepositoryImpl.create() => ConnectivityRepositoryImpl(
+    ConnectivityDataSourceImpl(),
+    ConnectivityMeteredDataSourceImpl(),
+  );
 
   final ConnectivityDataSource _source;
   final ConnectivityMeteredDataSource _meteredSource;
@@ -48,13 +38,25 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
   // `_subject.value` throws on boot.
   final BehaviorSubject<ConnectivityStatus> _subject =
       BehaviorSubject<ConnectivityStatus>.seeded(ConnectivityStatus.offline);
+  final StreamController<ConnectivityError> _errors =
+      StreamController<ConnectivityError>.broadcast();
+
+  @override
+  Stream<ConnectivityError> get errors => _errors.stream;
 
   Future<void> _seedAndForward() async {
     // Seed the live status once so `.value` is real as early as possible,
     // falling back to the construction-time `offline` seed on a probe fault.
     try {
       _subject.add(await getStatus());
-    } on PlatformException {
+    } on PlatformException catch (e, s) {
+      _errors.add(
+        ConnectivityError(
+          'Connectivity seed failed → fallback offline',
+          e,
+          s,
+        ),
+      );
       _subject.add(ConnectivityStatus.offline);
     }
 
@@ -69,10 +71,16 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
   }
 
   // Keeps the last known status rather than forwarding the error onto
-  // [_subject] — this package has no logging dependency of its own, so a
-  // consumer that wants this surfaced observes it however it already
-  // observes its own errors, upstream of this repository.
-  void _onStreamError(Object error, StackTrace stackTrace) {}
+  // [_subject] — [errors] is where a consumer observes this instead.
+  void _onStreamError(Object error, StackTrace stackTrace) {
+    _errors.add(
+      ConnectivityError(
+        'Connectivity adapter stream emitted error → keeping last known status',
+        error,
+        stackTrace,
+      ),
+    );
+  }
 
   @override
   Future<ConnectivityStatus> getStatus() async {
@@ -120,13 +128,27 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
   Future<bool?> _readMetered() async {
     try {
       return await _meteredSource.isActiveNetworkMetered();
-    } on PlatformException {
+    } on PlatformException catch (e, stackTrace) {
       // Mobile metered probe faulted (e.g. a missing ACCESS_NETWORK_STATE
       // surfacing as a SecurityException) → degrade to the type-list heuristic
       // rather than fail the download gate.
+      _errors.add(
+        ConnectivityError(
+          'Metered probe failed → heuristic fallback',
+          e,
+          stackTrace,
+        ),
+      );
       return null;
-    } on TimeoutException {
+    } on TimeoutException catch (e, stackTrace) {
       // Probe outran its timeout → same heuristic fallback.
+      _errors.add(
+        ConnectivityError(
+          'Metered probe timed out → heuristic fallback',
+          e,
+          stackTrace,
+        ),
+      );
       return null;
     }
   }
