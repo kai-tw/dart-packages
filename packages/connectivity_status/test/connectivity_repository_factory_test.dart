@@ -3,12 +3,11 @@ import 'package:connectivity_status/src/data/connectivity_repository_impl.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Covers [ConnectivityRepository.instance] — the *only* way to get a real
-/// repository (there is no separate "build me a fresh one" constructor; a
-/// device has exactly one real network state). It wires the real
-/// [ConnectivityDataSourceImpl] and probes it eagerly at construction, so
-/// exercising it here means standing in for `connectivity_plus`'s own
-/// channels, not just reading a getter.
+/// Covers [ConnectivityRepository]'s factory constructor — the only way to
+/// get a real repository. It wires the real [ConnectivityDataSourceImpl] and
+/// probes it eagerly at construction, so exercising it here means standing
+/// in for `connectivity_plus`'s own channels, not just calling a
+/// constructor.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -44,11 +43,10 @@ void main() {
         .setMockMethodCallHandler(connectivityChannel, null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockStreamHandler(connectivityEventChannel, null);
-    ConnectivityRepository.resetInstance();
   });
 
   test('is a real, working repository', () async {
-    final ConnectivityRepository repository = ConnectivityRepository.instance;
+    final ConnectivityRepository repository = ConnectivityRepository();
 
     await Future<void>.delayed(Duration.zero);
     expect(repository.observeStatus().value, ConnectivityStatus.offline);
@@ -58,36 +56,21 @@ void main() {
     'is backed by the internal impl, not something a consumer could swap',
     () {
       // The one place this package's own test suite pins the concrete
-      // class — proving the public accessor actually returns a real,
+      // class — proving the public factory actually returns a real,
       // working object rather than, say, an unimplemented stub. No
       // consumer test should ever need to do this.
-      expect(
-        ConnectivityRepository.instance,
-        isA<ConnectivityRepositoryImpl>(),
-      );
+      expect(ConnectivityRepository(), isA<ConnectivityRepositoryImpl>());
     },
   );
 
-  test('returns the same instance on every access', () {
-    final ConnectivityRepository a = ConnectivityRepository.instance;
-    final ConnectivityRepository b = ConnectivityRepository.instance;
+  test('each call builds an independent instance', () {
+    // Unlike the removed .instance singleton — a device has one real
+    // network state, but nothing about this factory pretends to enforce
+    // that. Whether an app treats it as a singleton is its own DI
+    // container's call, not this package's.
+    final ConnectivityRepository a = ConnectivityRepository();
+    final ConnectivityRepository b = ConnectivityRepository();
 
-    expect(identical(a, b), isTrue);
-  });
-
-  test('resetInstance() drops the cache — the next access builds fresh', () {
-    final ConnectivityRepository before = ConnectivityRepository.instance;
-
-    ConnectivityRepository.resetInstance();
-    final ConnectivityRepository after = ConnectivityRepository.instance;
-
-    expect(
-      identical(before, after),
-      isFalse,
-      reason:
-          'A stale reset that no-ops would leave every test after the '
-          'first one sharing a repository built (and already '
-          'platform-probed) for a prior test.',
-    );
+    expect(identical(a, b), isFalse);
   });
 }

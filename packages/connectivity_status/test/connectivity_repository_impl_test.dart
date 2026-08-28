@@ -601,7 +601,18 @@ void main() {
 
         // If getStatus() throws here the test fails — that is the "no throw
         // escapes" assertion.
+        final List<ConnectivityException> exceptions =
+            <ConnectivityException>[];
+        final StreamSubscription<ConnectivityException> sub = repository
+            .exceptions
+            .listen(exceptions.add);
+        addTearDown(sub.cancel);
+
         final ConnectivityStatus status = await repository.getStatus();
+        // exceptions is a broadcast StreamController with async (non-sync)
+        // delivery — the listener callback fires on a later microtask than
+        // the getStatus() Future's own resolution.
+        await Future<void>.delayed(Duration.zero);
 
         expect(status, equals(ConnectivityStatus.cellular));
         expect(
@@ -611,6 +622,14 @@ void main() {
               'The metered source must be invoked (and then caught) — '
               'the catch must not prevent the call from happening at all.',
         );
+        expect(
+          exceptions,
+          <Matcher>[isA<ConnectivityMeteredProbeException>()],
+          reason:
+              'A caught PlatformException is still a fault worth a consumer '
+              'knowing about, even though getStatus() itself absorbs it.',
+        );
+        expect(exceptions.single.exception, same(fake.throwWith));
       },
     );
 
@@ -637,10 +656,23 @@ void main() {
           (_) async => const <ConnectivityResult>[ConnectivityResult.mobile],
         );
 
+        final List<ConnectivityException> exceptions =
+            <ConnectivityException>[];
+        final StreamSubscription<ConnectivityException> sub = repository
+            .exceptions
+            .listen(exceptions.add);
+        addTearDown(sub.cancel);
+
         final ConnectivityStatus status = await repository.getStatus();
+        await Future<void>.delayed(Duration.zero);
 
         expect(status, equals(ConnectivityStatus.cellular));
         expect(fake.callCount, isPositive);
+        expect(
+          exceptions,
+          <Matcher>[isA<ConnectivityMeteredProbeTimeoutException>()],
+        );
+        expect(exceptions.single.exception, same(fake.throwWith));
       },
     );
   });
@@ -747,9 +779,11 @@ void main() {
       // (checkConnectivity) maps to offline fallback in _seedAndForward, not
       // an uncaught error. The metered source is never reached because the
       // exception fires before _statusFrom is called.
-      when(() => mockSource.checkConnectivity()).thenThrow(
-        PlatformException(code: 'PERMISSION_DENIED', message: 'denied'),
+      final PlatformException fault = PlatformException(
+        code: 'PERMISSION_DENIED',
+        message: 'denied',
       );
+      when(() => mockSource.checkConnectivity()).thenThrow(fault);
       when(
         () => mockSource.observeConnectivity(),
       ).thenAnswer((_) => const Stream<List<ConnectivityResult>>.empty());
@@ -758,6 +792,14 @@ void main() {
         mockSource,
         FakeConnectivityMeteredDataSource(),
       );
+      // Subscribe before any await — exceptions is a broadcast stream with
+      // no replay, so a subscriber that joins after the seed's catch block
+      // has already run would miss the emission.
+      final List<ConnectivityException> exceptions = <ConnectivityException>[];
+      final StreamSubscription<ConnectivityException> sub = repository
+          .exceptions
+          .listen(exceptions.add);
+      addTearDown(sub.cancel);
 
       // Allow the async seed to settle (catches PlatformException, adds offline).
       await Future<void>.delayed(Duration.zero);
@@ -772,6 +814,44 @@ void main() {
             'add ConnectivityStatus.offline to the subject rather than '
             'leaving the subject empty.',
       );
+      expect(exceptions.single, isA<ConnectivitySeedException>());
+      expect(exceptions.single.exception, same(fault));
     });
+
+    test(
+      'adapter stream error → keeps last known status, surfaces on exceptions',
+      () async {
+        final StreamController<List<ConnectivityResult>> controller =
+            StreamController<List<ConnectivityResult>>();
+        final ConnectivityRepositoryImpl repository = buildRepository(
+          mockSource: mockSource,
+          seedResults: <ConnectivityResult>[ConnectivityResult.wifi],
+          adapterStream: controller.stream,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        final List<ConnectivityException> exceptions =
+            <ConnectivityException>[];
+        final StreamSubscription<ConnectivityException> exceptionSub =
+            repository.exceptions.listen(exceptions.add);
+        addTearDown(exceptionSub.cancel);
+
+        final Exception fault = Exception('adapter stream failed');
+        controller.addError(fault);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          repository.observeStatus().value,
+          equals(ConnectivityStatus.unmetered),
+          reason:
+              'A stream error keeps the last known status rather than '
+              'resetting to offline or propagating onto observeStatus().',
+        );
+        expect(exceptions.single, isA<ConnectivityStreamException>());
+        expect(exceptions.single.exception, same(fault));
+
+        await controller.close();
+      },
+    );
   });
 }

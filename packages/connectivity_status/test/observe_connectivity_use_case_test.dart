@@ -14,87 +14,18 @@ library;
 import 'dart:async';
 
 import 'package:connectivity_status/connectivity_status.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:rxdart/rxdart.dart';
 
 import 'helpers/connectivity_mocks.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  group('ObserveConnectivityUseCase.shared', () {
-    // .shared() wraps the real ConnectivityRepository.instance, which
-    // probes connectivity_plus's own channel eagerly at construction — see
-    // GetConnectivityUseCase.shared's own tests for why this needs a real
-    // channel mock rather than a mocktail double.
-    const MethodChannel connectivityChannel = MethodChannel(
-      'dev.fluttercommunity.plus/connectivity',
-    );
-    const EventChannel connectivityEventChannel = EventChannel(
-      'dev.fluttercommunity.plus/connectivity_status',
-    );
-
-    late int checkCalls;
-
-    setUp(() {
-      checkCalls = 0;
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(connectivityChannel, (
-            MethodCall call,
-          ) async {
-            if (call.method != 'check') {
-              return null;
-            }
-            checkCalls++;
-            return <String>[];
-          });
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockStreamHandler(
-            connectivityEventChannel,
-            MockStreamHandler.inline(
-              onListen:
-                  (Object? arguments, MockStreamHandlerEventSink events) {},
-            ),
-          );
-    });
-
-    tearDown(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(connectivityChannel, null);
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockStreamHandler(connectivityEventChannel, null);
-      ConnectivityRepository.resetInstance();
-    });
-
-    test(
-      'reuses ConnectivityRepository.instance, not a fresh repository',
-      () async {
-        // Force the singleton to exist and its construction-time seed to
-        // settle first, so the count below isolates what .shared() itself
-        // causes.
-        ConnectivityRepository.instance;
-        await Future<void>.delayed(Duration.zero);
-        final int callsBeforeSharedUseCase = checkCalls;
-
-        // observeStatus() itself never calls checkConnectivity() — only
-        // *construction* does (the fire-and-forget seed). So reusing the
-        // singleton must leave the count unchanged; a fresh repository would
-        // add one more call from its own seed.
-        ObserveConnectivityUseCase.shared()();
-
-        expect(checkCalls, equals(callsBeforeSharedUseCase));
-      },
-    );
-  });
-
-  late MockConnectivityRepository mockRepository;
+  late FakeConnectivityRepository fakeRepository;
   late ObserveConnectivityUseCase useCase;
 
   setUp(() {
-    mockRepository = MockConnectivityRepository();
-    useCase = ObserveConnectivityUseCase(mockRepository);
+    fakeRepository = FakeConnectivityRepository();
+    useCase = ObserveConnectivityUseCase(fakeRepository);
   });
 
   group('ObserveConnectivityUseCase', () {
@@ -105,8 +36,7 @@ void main() {
             ConnectivityStatus.offline,
           );
       addTearDown(subject.close);
-
-      when(() => mockRepository.observeStatus()).thenAnswer((_) => subject);
+      fakeRepository.observeStatusResult = subject;
 
       final ValueStream<ConnectivityStatus> result = useCase();
 
@@ -115,7 +45,7 @@ void main() {
       // would return a *different* stream object even though the events
       // line up. The contract is "pass through, don't re-shape".
       expect(result, same(subject));
-      verify(() => mockRepository.observeStatus()).called(1);
+      expect(fakeRepository.observeStatusCallCount, equals(1));
     });
 
     test('[scenario] consumer of the use-case stream receives every emission '
@@ -125,7 +55,7 @@ void main() {
             ConnectivityStatus.offline,
           );
       addTearDown(subject.close);
-      when(() => mockRepository.observeStatus()).thenAnswer((_) => subject);
+      fakeRepository.observeStatusResult = subject;
 
       final List<ConnectivityStatus> received = <ConnectivityStatus>[];
       final StreamSubscription<ConnectivityStatus> subscription = useCase()
@@ -155,7 +85,7 @@ void main() {
             ConnectivityStatus.offline,
           );
       addTearDown(subject.close);
-      when(() => mockRepository.observeStatus()).thenAnswer((_) => subject);
+      fakeRepository.observeStatusResult = subject;
 
       final List<Object> errors = <Object>[];
       final StreamSubscription<ConnectivityStatus> subscription = useCase()

@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'connectivity_status'
-  s.version          = '0.1.0'
+  s.version          = '0.2.0'
   s.summary          = "The device's network state as one value, with a metered/unmetered distinction."
   s.description      = <<-DESC
 Reads the OS-level metered-network capability (NWPath.isExpensive) behind a
@@ -17,12 +17,9 @@ unmetered one instead of only online/offline.
   s.source           = { :path => '.' }
   s.source_files = 'connectivity_status/Sources/connectivity_status/**/*'
   s.dependency 'Flutter'
-  # Floor set by this package's own dependency on `log_system`, which pulls
-  # in firebase_crashlytics / firebase_core — both require iOS 15 via Swift
-  # Package Manager. Declaring a lower floor here would be wrong, not
-  # permissive: any consumer resolving fresh hits the same SPM platform
-  # conflict this package's own example app did.
-  s.platform = :ios, '15.0'
+  # 13.0 is Flutter's own current floor, not something this package's native
+  # code needs — connectivity_plus itself only requires 12.0.
+  s.platform = :ios, '13.0'
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }

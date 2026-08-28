@@ -17,11 +17,6 @@ import 'connectivity_status.dart';
 class ObserveConnectivityUseCase {
   const ObserveConnectivityUseCase(this._repository);
 
-  /// No DI framework? This is the zero-config path — see
-  /// [GetConnectivityUseCase.shared].
-  factory ObserveConnectivityUseCase.shared() =>
-      ObserveConnectivityUseCase(ConnectivityRepository.instance);
-
   final ConnectivityRepository _repository;
 
   ValueStream<ConnectivityStatus> call() => _repository.observeStatus();

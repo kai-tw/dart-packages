@@ -10,9 +10,10 @@ contract, the `connectivity_plus` adapter, and the native metered-network
 probe. CherishCRM's onboarding flow is the second consumer.
 
 ```dart
-// No DI framework? .shared() wraps ConnectivityRepository.instance.
-final GetConnectivityUseCase getConnectivity = GetConnectivityUseCase.shared();
-final ObserveConnectivityUseCase observeConnectivity = ObserveConnectivityUseCase.shared();
+// Build it once — no DI framework needed, but nothing stops you using one.
+final ConnectivityRepository connectivity = ConnectivityRepository();
+final GetConnectivityUseCase getConnectivity = GetConnectivityUseCase(connectivity);
+final ObserveConnectivityUseCase observeConnectivity = ObserveConnectivityUseCase(connectivity);
 
 final ConnectivityStatus now = await getConnectivity();
 observeConnectivity().listen((ConnectivityStatus status) {
@@ -44,25 +45,43 @@ genuine unmetered link. When the platform exposes no metered signal (desktop,
 web) or the probe faults, the repository falls back to a Wi-Fi/ethernet
 allowlist.
 
-## Assembling it: `ConnectivityRepository.instance` is the only door in
+## Assembling it: a plain constructor, singleton-ness is your call
 
 ```dart
 abstract class ConnectivityRepository {
-  /// The shared repository. Built once, on first access.
-  static ConnectivityRepository get instance => ...;
+  /// Builds a fully-wired repository, backed by the real platform adapters.
+  factory ConnectivityRepository() = ...;
 
+  Stream<ConnectivityException> get exceptions;
   Future<ConnectivityStatus> getStatus();
   ValueStream<ConnectivityStatus> observeStatus();
 }
 ```
 
-A device has exactly one real network state, so there is no "build me an
-independent fresh instance" constructor to register — every consumer, DI
-framework or none, reads the same [instance]. That single shared object is
-also why this package ships the wiring at all, unlike `preference_store`:
-`PreferenceRepository<T>` is a template each domain (reader settings, TTS, …)
-instantiates into its own shape, so there is no one correct wiring a package
-could hand back; `ConnectivityRepository` has no such variance.
+This package takes no view on whether the result should be a singleton. A
+device has exactly one real network state, but nothing about that requires
+*this package* to enforce a single shared object — that's a DI decision,
+and DI decisions belong to the app, not the library:
+
+```dart
+// No DI framework — build it once in main() and pass it down.
+final ConnectivityRepository connectivity = ConnectivityRepository();
+
+// get_it
+sl.registerLazySingleton<ConnectivityRepository>(ConnectivityRepository.new);
+
+// riverpod
+@riverpod
+ConnectivityRepository connectivityRepository(Ref ref) =>
+    ConnectivityRepository();
+```
+
+This is also why the package ships the wiring at all, unlike
+`preference_store`: `PreferenceRepository<T>` is a template each domain
+(reader settings, TTS, …) instantiates into its own shape, so there is no
+one correct wiring a package could hand back; `ConnectivityRepository` has
+no such variance — every consumer wants the same real adapters behind it,
+just not necessarily the same *object*.
 
 **Nothing behind the contract is exported** — not the concrete
 `ConnectivityRepositoryImpl`, not the `ConnectivityDataSource` /
@@ -70,33 +89,57 @@ could hand back; `ConnectivityRepository` has no such variance.
 has a name to spell other than `ConnectivityRepository`, so it can't
 accidentally couple to the implementation instead of the contract.
 
-- **No DI framework?** `GetConnectivityUseCase.shared()` and
-  `ObserveConnectivityUseCase.shared()` wrap `ConnectivityRepository.instance`
-  directly — the zero-config path never touches `ConnectivityRepository` at
-  all:
+## Failures are a stream, not a logging call
 
-  ```dart
-  final getConnectivity = GetConnectivityUseCase.shared();
-  final observeConnectivity = ObserveConnectivityUseCase.shared();
-  ```
+This package has no logging dependency of its own — it never decides how a
+failure gets recorded. Instead, every non-fatal fault it catches internally
+is emitted on `exceptions` as one of four concrete, `sealed`-enforced
+causes:
 
-- **Using `get_it` or Riverpod?** Register the getter's *value*, not a
-  rebuild of it — there's nothing to rebuild:
+```dart
+sealed class ConnectivityException implements Exception {
+  final Object exception;
+  final StackTrace stackTrace;
+}
 
-  ```dart
-  // get_it
-  sl.registerLazySingleton<ConnectivityRepository>(() => ConnectivityRepository.instance);
+final class ConnectivitySeedException extends ConnectivityException {}
+final class ConnectivityStreamException extends ConnectivityException {}
+final class ConnectivityMeteredProbeException extends ConnectivityException {}
+final class ConnectivityMeteredProbeTimeoutException extends ConnectivityException {}
+```
 
-  // riverpod
-  @riverpod
-  ConnectivityRepository connectivityRepository(Ref ref) =>
-      ConnectivityRepository.instance;
-  ```
+`implements Exception`, not `extends Error` — this is an expected,
+already-recovered-from condition worth knowing about, not a Dart `Error` (a
+programmer bug that should propagate to a zone handler, never be caught and
+reported like this). `sealed` so a consumer's `switch` is a coverage
+contract, not a guess from a free-text message — a fifth cause added later
+fails to compile until every `switch` handles it:
 
-  Inject the container's result via the plain constructors
-  (`GetConnectivityUseCase(repository)`) rather than reading `.instance`
-  again elsewhere — that keeps the app's own container the one place that
-  names it.
+```dart
+connectivity.exceptions.listen((ConnectivityException e) {
+  final String cause = switch (e) {
+    ConnectivitySeedException() => 'seed probe failed',
+    ConnectivityStreamException() => 'connectivity stream errored',
+    ConnectivityMeteredProbeException() => 'metered probe failed',
+    ConnectivityMeteredProbeTimeoutException() => 'metered probe timed out',
+  };
+  // Wire this into whatever the app already uses — log_system, Crashlytics,
+  // a debug banner. This package has no opinion on which.
+  myLogger.warning(cause, error: e.exception, stackTrace: e.stackTrace);
+});
+```
+
+Unlike a typical project-scoped domain exception, each subclass still
+carries the raw caught `exception` rather than only domain-relevant fields:
+this package has no redactor of its own to translate a platform fault
+safely first, so the raw value is the consumer's own logger's to read (and
+redact, if it needs to).
+
+Every occurrence already has a safe fallback in effect by the time it's
+emitted — `getStatus()` and `observeStatus()` keep working regardless of
+whether anything listens to `errors`. An expected platform absence (desktop
+/ web registering no metered handler) is never emitted here; that isn't a
+failure, it's documented behavior (see below).
 
 ## What this package does not do
 
@@ -130,8 +173,6 @@ extensibility point.
 Requires `android.permission.ACCESS_NETWORK_STATE` on Android. iOS needs no
 extra entitlement.
 
-**Deployment floor:** this package's own dependency on `log_system` pulls in
-`firebase_crashlytics` / `firebase_core`, which require iOS 15 via Swift
-Package Manager — this package's podspec and `Package.swift` declare that
-floor accordingly. Every consumer this was built for (NovelGlide, CherishCRM)
-already targets iOS 15+.
+**Deployment floor:** iOS 13.0 — Flutter's own current floor, not something
+this package's native code needs on its own (`connectivity_plus` itself only
+requires 12.0).

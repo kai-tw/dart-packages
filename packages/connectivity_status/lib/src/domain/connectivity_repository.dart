@@ -1,7 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 
 import '../data/connectivity_repository_impl.dart';
+import 'connectivity_exception.dart';
 import 'connectivity_status.dart';
 
 /// One-app source of truth for network state.
@@ -10,36 +10,39 @@ import 'connectivity_status.dart';
 /// subscribe to the full lifetime via [observeStatus], which emits the
 /// current value immediately and then again on every change.
 ///
-/// Never implemented outside this package — [instance] is the only way to
-/// get one. The concrete class stays internal on purpose: a consumer that
-/// never has to spell its name can't accidentally couple to it instead of
-/// this contract. There is no separate "build me a fresh one" constructor
-/// either — a device has exactly one real network state, so every consumer,
-/// DI framework or none, reads the same [instance].
+/// Never implemented outside this package. The concrete class stays
+/// internal on purpose: a consumer that never has to spell its name can't
+/// accidentally couple to it instead of this contract.
 abstract class ConnectivityRepository {
-  /// The shared repository. Built once, on first access.
+  /// Builds a fully-wired repository, backed by the real platform adapters.
   ///
-  /// A consumer using `get_it`, Riverpod, or anything else registers this
-  /// getter's *value*, not a rebuild of it:
+  /// This package takes no view on whether the result should be a
+  /// singleton — a device has one real network state either way, so ask
+  /// whatever DI you use to only build one if that's the shape you want:
   ///
   /// ```dart
   /// // get_it
-  /// sl.registerLazySingleton<ConnectivityRepository>(() => ConnectivityRepository.instance);
+  /// sl.registerLazySingleton<ConnectivityRepository>(ConnectivityRepository.new);
   ///
   /// // riverpod
   /// @riverpod
   /// ConnectivityRepository connectivityRepository(Ref ref) =>
-  ///     ConnectivityRepository.instance;
+  ///     ConnectivityRepository();
+  ///
+  /// // no DI framework — build it once in main() and pass it down
+  /// final ConnectivityRepository connectivity = ConnectivityRepository();
   /// ```
-  static ConnectivityRepository get instance =>
-      ConnectivityRepositoryImpl.instance;
+  factory ConnectivityRepository() = ConnectivityRepositoryImpl.create;
 
-  /// Drops the shared [instance]. Test seam — production code never calls
-  /// it. Without this, the first test in a suite to touch [instance] would
-  /// leave every later test sharing its repository (and its already-open
-  /// platform-channel subscriptions).
-  @visibleForTesting
-  static void resetInstance() => ConnectivityRepositoryImpl.resetInstance();
+  /// Non-fatal failures observed internally — one of [ConnectivitySeedException],
+  /// [ConnectivityStreamException], [ConnectivityMeteredProbeException], or
+  /// [ConnectivityMeteredProbeTimeoutException]. Every one already has a
+  /// safe fallback in effect by the time it's emitted here; this exists so
+  /// a consumer can log or react to it however it already does for its own
+  /// errors — `switch` over the sealed type for exhaustive handling. Never
+  /// emits for an expected platform absence (desktop / web registering no
+  /// metered handler) — that isn't a failure.
+  Stream<ConnectivityException> get exceptions;
 
   /// One-shot query for the current network state.
   Future<ConnectivityStatus> getStatus();

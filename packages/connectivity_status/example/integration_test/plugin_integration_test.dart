@@ -30,12 +30,11 @@ void main() {
   );
 
   testWidgets(
-    'GetConnectivityUseCase.shared() resolves a real status against the '
-    'real adapters',
+    'GetConnectivityUseCase resolves a real status against the real adapters',
     (WidgetTester tester) async {
-      // The same zero-config path a real consumer with no DI framework
-      // would use — not a hand-assembled repository.
-      final ConnectivityStatus status = await GetConnectivityUseCase.shared()();
+      final ConnectivityStatus status = await GetConnectivityUseCase(
+        ConnectivityRepository(),
+      )();
 
       expect(ConnectivityStatus.values, contains(status));
     },
