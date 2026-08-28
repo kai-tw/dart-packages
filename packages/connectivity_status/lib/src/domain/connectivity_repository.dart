@@ -1,7 +1,7 @@
 import 'package:rxdart/rxdart.dart';
 
 import '../data/connectivity_repository_impl.dart';
-import 'connectivity_error.dart';
+import 'connectivity_exception.dart';
 import 'connectivity_status.dart';
 
 /// One-app source of truth for network state.
@@ -40,7 +40,7 @@ abstract class ConnectivityRepository {
   /// consumer can log or react to it however it already does for its own
   /// errors. Never emits for an expected platform absence (desktop / web
   /// registering no metered handler) — that isn't a failure.
-  Stream<ConnectivityError> get errors;
+  Stream<ConnectivityException> get exceptions;
 
   /// One-shot query for the current network state.
   Future<ConnectivityStatus> getStatus();

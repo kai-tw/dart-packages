@@ -17,8 +17,8 @@ void main() {
   // This package has no logging dependency of its own — errors are just a
   // stream. debugPrint here stands in for whatever an app already uses
   // (log_system, Crashlytics, ...).
-  connectivity.errors.listen(
-    (ConnectivityError error) => debugPrint(error.toString()),
+  connectivity.exceptions.listen(
+    (ConnectivityException exception) => debugPrint(exception.toString()),
   );
 
   runApp(

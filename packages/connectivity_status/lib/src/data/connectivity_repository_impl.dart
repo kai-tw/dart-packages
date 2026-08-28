@@ -4,7 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:rxdart/rxdart.dart';
 
-import '../domain/connectivity_error.dart';
+import '../domain/connectivity_exception.dart';
 import '../domain/connectivity_repository.dart';
 import '../domain/connectivity_status.dart';
 import 'connectivity_data_source.dart';
@@ -38,11 +38,11 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
   // `_subject.value` throws on boot.
   final BehaviorSubject<ConnectivityStatus> _subject =
       BehaviorSubject<ConnectivityStatus>.seeded(ConnectivityStatus.offline);
-  final StreamController<ConnectivityError> _errors =
-      StreamController<ConnectivityError>.broadcast();
+  final StreamController<ConnectivityException> _exceptions =
+      StreamController<ConnectivityException>.broadcast();
 
   @override
-  Stream<ConnectivityError> get errors => _errors.stream;
+  Stream<ConnectivityException> get exceptions => _exceptions.stream;
 
   Future<void> _seedAndForward() async {
     // Seed the live status once so `.value` is real as early as possible,
@@ -50,8 +50,8 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
     try {
       _subject.add(await getStatus());
     } on PlatformException catch (e, s) {
-      _errors.add(
-        ConnectivityError(
+      _exceptions.add(
+        ConnectivityException(
           'Connectivity seed failed → fallback offline',
           e,
           s,
@@ -71,10 +71,10 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
   }
 
   // Keeps the last known status rather than forwarding the error onto
-  // [_subject] — [errors] is where a consumer observes this instead.
+  // [_subject] — [exceptions] is where a consumer observes this instead.
   void _onStreamError(Object error, StackTrace stackTrace) {
-    _errors.add(
-      ConnectivityError(
+    _exceptions.add(
+      ConnectivityException(
         'Connectivity adapter stream emitted error → keeping last known status',
         error,
         stackTrace,
@@ -132,8 +132,8 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
       // Mobile metered probe faulted (e.g. a missing ACCESS_NETWORK_STATE
       // surfacing as a SecurityException) → degrade to the type-list heuristic
       // rather than fail the download gate.
-      _errors.add(
-        ConnectivityError(
+      _exceptions.add(
+        ConnectivityException(
           'Metered probe failed → heuristic fallback',
           e,
           stackTrace,
@@ -142,8 +142,8 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
       return null;
     } on TimeoutException catch (e, stackTrace) {
       // Probe outran its timeout → same heuristic fallback.
-      _errors.add(
-        ConnectivityError(
+      _exceptions.add(
+        ConnectivityException(
           'Metered probe timed out → heuristic fallback',
           e,
           stackTrace,

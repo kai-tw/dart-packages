@@ -52,7 +52,7 @@ abstract class ConnectivityRepository {
   /// Builds a fully-wired repository, backed by the real platform adapters.
   factory ConnectivityRepository() = ...;
 
-  Stream<ConnectivityError> get errors;
+  Stream<ConnectivityException> get exceptions;
   Future<ConnectivityStatus> getStatus();
   ValueStream<ConnectivityStatus> observeStatus();
 }
@@ -89,20 +89,25 @@ just not necessarily the same *object*.
 has a name to spell other than `ConnectivityRepository`, so it can't
 accidentally couple to the implementation instead of the contract.
 
-## Errors are a stream, not a logging call
+## Failures are a stream, not a logging call
 
 This package has no logging dependency of its own — it never decides how a
 failure gets recorded. Instead, every non-fatal fault it catches internally
 (a seed probe fault, an adapter stream error, a metered-probe fault or
-timeout) is emitted on `errors`:
+timeout) is emitted on `exceptions`:
 
 ```dart
-connectivity.errors.listen((ConnectivityError e) {
+connectivity.exceptions.listen((ConnectivityException e) {
   // Wire this into whatever the app already uses — log_system, Crashlytics,
   // a debug banner. This package has no opinion on which.
-  myLogger.warning(e.context, error: e.error, stackTrace: e.stackTrace);
+  myLogger.warning(e.context, error: e.exception, stackTrace: e.stackTrace);
 });
 ```
+
+Named `ConnectivityException`, not `ConnectivityError` — this is an
+expected, already-recovered-from condition worth knowing about, not a Dart
+`Error` (a programmer bug that should propagate to a zone handler, never be
+caught and reported like this).
 
 Every occurrence already has a safe fallback in effect by the time it's
 emitted — `getStatus()` and `observeStatus()` keep working regardless of

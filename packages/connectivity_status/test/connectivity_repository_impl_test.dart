@@ -601,13 +601,15 @@ void main() {
 
         // If getStatus() throws here the test fails — that is the "no throw
         // escapes" assertion.
-        final List<ConnectivityError> errors = <ConnectivityError>[];
-        final StreamSubscription<ConnectivityError> sub = repository.errors
-            .listen(errors.add);
+        final List<ConnectivityException> exceptions =
+            <ConnectivityException>[];
+        final StreamSubscription<ConnectivityException> sub = repository
+            .exceptions
+            .listen(exceptions.add);
         addTearDown(sub.cancel);
 
         final ConnectivityStatus status = await repository.getStatus();
-        // errors is a broadcast StreamController with async (non-sync)
+        // exceptions is a broadcast StreamController with async (non-sync)
         // delivery — the listener callback fires on a later microtask than
         // the getStatus() Future's own resolution.
         await Future<void>.delayed(Duration.zero);
@@ -621,13 +623,13 @@ void main() {
               'the catch must not prevent the call from happening at all.',
         );
         expect(
-          errors,
-          <Matcher>[isA<ConnectivityError>()],
+          exceptions,
+          <Matcher>[isA<ConnectivityException>()],
           reason:
               'A caught PlatformException is still a fault worth a consumer '
               'knowing about, even though getStatus() itself absorbs it.',
         );
-        expect(errors.single.error, same(fake.throwWith));
+        expect(exceptions.single.exception, same(fake.throwWith));
       },
     );
 
@@ -654,9 +656,11 @@ void main() {
           (_) async => const <ConnectivityResult>[ConnectivityResult.mobile],
         );
 
-        final List<ConnectivityError> errors = <ConnectivityError>[];
-        final StreamSubscription<ConnectivityError> sub = repository.errors
-            .listen(errors.add);
+        final List<ConnectivityException> exceptions =
+            <ConnectivityException>[];
+        final StreamSubscription<ConnectivityException> sub = repository
+            .exceptions
+            .listen(exceptions.add);
         addTearDown(sub.cancel);
 
         final ConnectivityStatus status = await repository.getStatus();
@@ -664,7 +668,7 @@ void main() {
 
         expect(status, equals(ConnectivityStatus.cellular));
         expect(fake.callCount, isPositive);
-        expect(errors.single.error, same(fake.throwWith));
+        expect(exceptions.single.exception, same(fake.throwWith));
       },
     );
   });
@@ -784,12 +788,13 @@ void main() {
         mockSource,
         FakeConnectivityMeteredDataSource(),
       );
-      // Subscribe before any await — errors is a broadcast stream with no
-      // replay, so a subscriber that joins after the seed's catch block has
-      // already run would miss the emission.
-      final List<ConnectivityError> errors = <ConnectivityError>[];
-      final StreamSubscription<ConnectivityError> sub = repository.errors
-          .listen(errors.add);
+      // Subscribe before any await — exceptions is a broadcast stream with
+      // no replay, so a subscriber that joins after the seed's catch block
+      // has already run would miss the emission.
+      final List<ConnectivityException> exceptions = <ConnectivityException>[];
+      final StreamSubscription<ConnectivityException> sub = repository
+          .exceptions
+          .listen(exceptions.add);
       addTearDown(sub.cancel);
 
       // Allow the async seed to settle (catches PlatformException, adds offline).
@@ -805,11 +810,11 @@ void main() {
             'add ConnectivityStatus.offline to the subject rather than '
             'leaving the subject empty.',
       );
-      expect(errors.single.error, same(fault));
+      expect(exceptions.single.exception, same(fault));
     });
 
     test(
-      'adapter stream error → keeps last known status, surfaces on errors',
+      'adapter stream error → keeps last known status, surfaces on exceptions',
       () async {
         final StreamController<List<ConnectivityResult>> controller =
             StreamController<List<ConnectivityResult>>();
@@ -820,10 +825,11 @@ void main() {
         );
         await Future<void>.delayed(Duration.zero);
 
-        final List<ConnectivityError> errors = <ConnectivityError>[];
-        final StreamSubscription<ConnectivityError> errorSub = repository.errors
-            .listen(errors.add);
-        addTearDown(errorSub.cancel);
+        final List<ConnectivityException> exceptions =
+            <ConnectivityException>[];
+        final StreamSubscription<ConnectivityException> exceptionSub =
+            repository.exceptions.listen(exceptions.add);
+        addTearDown(exceptionSub.cancel);
 
         final Exception fault = Exception('adapter stream failed');
         controller.addError(fault);
@@ -836,7 +842,7 @@ void main() {
               'A stream error keeps the last known status rather than '
               'resetting to offline or propagating onto observeStatus().',
         );
-        expect(errors.single.error, same(fault));
+        expect(exceptions.single.exception, same(fault));
 
         await controller.close();
       },

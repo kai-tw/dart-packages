@@ -5,18 +5,19 @@ import 'package:rxdart/rxdart.dart';
 
 /// Hand-written fake for [ConnectivityRepository].
 ///
-/// [ConnectivityRepository.errors] is a public `Stream`-returning getter, so
-/// `Mock implements ConnectivityRepository` would trip `avoid_listenable_mock`
-/// (Prong B) — a mocktail proxy stubs a stream getter without exercising real
-/// subscription behavior. [errors] here is backed by a real, unused
-/// `StreamController`; [getStatus] and [observeStatus] are simple
-/// configurable stand-ins for what the use-case tests actually exercise.
+/// [ConnectivityRepository.exceptions] is a public `Stream`-returning
+/// getter, so `Mock implements ConnectivityRepository` would trip
+/// `avoid_listenable_mock` (Prong B) — a mocktail proxy stubs a stream
+/// getter without exercising real subscription behavior. [exceptions] here
+/// is backed by a real, unused `StreamController`; [getStatus] and
+/// [observeStatus] are simple configurable stand-ins for what the use-case
+/// tests actually exercise.
 class FakeConnectivityRepository implements ConnectivityRepository {
-  final StreamController<ConnectivityError> _errors =
-      StreamController<ConnectivityError>.broadcast();
+  final StreamController<ConnectivityException> _exceptions =
+      StreamController<ConnectivityException>.broadcast();
 
   @override
-  Stream<ConnectivityError> get errors => _errors.stream;
+  Stream<ConnectivityException> get exceptions => _exceptions.stream;
 
   /// Configures what [getStatus] resolves to, or throws [throwWith] instead.
   ConnectivityStatus? response;

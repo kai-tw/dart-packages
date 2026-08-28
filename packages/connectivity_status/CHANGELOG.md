@@ -31,14 +31,17 @@ final connectivity = ConnectivityRepository();
 final getConnectivity = GetConnectivityUseCase(connectivity);
 ```
 
-**New: `ConnectivityRepository.errors`.** A `Stream<ConnectivityError>` of
-every non-fatal fault this package catches internally — a seed probe
+**New: `ConnectivityRepository.exceptions`.** A `Stream<ConnectivityException>`
+of every non-fatal fault this package catches internally — a seed probe
 fault, an adapter stream error, a metered-probe fault or timeout. Each
 already has a safe fallback in effect by the time it's emitted; this
 exists purely so a consumer can log or react to it however it already
 does for its own errors (this package has no logging dependency of its
 own — see 0.1.1). Never emitted for an expected platform absence
 (desktop / web registering no metered handler); that isn't a failure.
+Named `ConnectivityException`, not `ConnectivityError` — this is an
+expected, already-recovered-from condition, not a Dart `Error` (a
+programmer bug that should propagate to a zone handler).
 
 ## 0.1.1
 
