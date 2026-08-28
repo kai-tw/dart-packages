@@ -21,13 +21,22 @@ enum ProjectScope {
 ///
 /// In an application a top-level identifier is a global symbol: any file may
 /// import and use it without declaring a dependency, it leaks across feature
-/// boundaries, and related helpers have no obvious owner to grow next to.
-/// Putting it on a class with a private constructor gives it a namespace, an
-/// owner, and a discoverable place for siblings.
+/// boundaries, and related helpers have no obvious owner to grow next to. The
+/// fix is to give it an owner: an extension method, a member on the type it
+/// operates on, or an enum for a closed set of related constants.
 ///
 /// That premise is an application's. In a publishable library the top-level
 /// names *are* the public API, so `scope: library` turns the rule off rather
 /// than narrowing it — see [ProjectScope].
+///
+/// **Interacts with `avoid_static_only_class`.** "Namespace it on a class
+/// with a private constructor" is *not* this rule's fix, even though it looks
+/// like the obvious one — that class, created solely to hold the orphaned
+/// declaration, is exactly the shape `avoid_static_only_class` forbids.
+/// Reach for a private-constructor class only as a last resort, when the
+/// declaration truly has no owning type, no natural extension target, and no
+/// closed set to join — and even then, add it as a static member to a class
+/// that already exists for other reasons, not one created just to hold it.
 ///
 /// Exempt (in `app` scope):
 /// - A top-level `main` — the language's entry point, wherever the file sits.
@@ -181,8 +190,9 @@ class _Visitor extends LintVisitor {
             ruleName: 'avoid_top_level_identifiers',
             message:
                 'Top-level ${member.variables.isConst ? 'const' : 'variable'} '
-                "'${v.name.lexeme}' — namespace it on a class with a "
-                'private constructor.',
+                "'${v.name.lexeme}' has no owner. Give it one: a static "
+                'field on the type it relates to, or an enum member for a '
+                'closed set.',
             offset: v.name.offset,
           );
         }
@@ -198,8 +208,9 @@ class _Visitor extends LintVisitor {
         report(
           ruleName: 'avoid_top_level_identifiers',
           message:
-              "Top-level function '${member.name.lexeme}' — namespace it "
-              'as a static method on a class with a private constructor.',
+              "Top-level function '${member.name.lexeme}' has no owner. "
+              'Give it one: an extension method, or a method on the type '
+              'it operates on.',
           offset: member.name.offset,
         );
       }

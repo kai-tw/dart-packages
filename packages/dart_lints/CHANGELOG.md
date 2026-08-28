@@ -1,3 +1,15 @@
+## 0.4.4
+
+`avoid_top_level_identifiers`'s own suggested fix was telling authors to
+commit the exact antipattern `avoid_static_only_class` forbids: "namespace it
+as a static method on a class with a private constructor" is precisely the
+shape the other rule reports. Enabling both together meant fixing one
+violation could immediately trip the other. The violation messages and class
+doc now lead with an extension method, a member on the type it operates on,
+or an enum for a closed set — the private-constructor class is a last resort,
+and only onto a class that already exists for other reasons. No rule logic
+changed, only the guidance text.
+
 ## 0.4.3
 
 Dogfooding fixes: this package's own source tripped `public_class_names_its_file`
