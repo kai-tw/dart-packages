@@ -32,16 +32,29 @@ final getConnectivity = GetConnectivityUseCase(connectivity);
 ```
 
 **New: `ConnectivityRepository.exceptions`.** A `Stream<ConnectivityException>`
-of every non-fatal fault this package catches internally — a seed probe
-fault, an adapter stream error, a metered-probe fault or timeout. Each
-already has a safe fallback in effect by the time it's emitted; this
-exists purely so a consumer can log or react to it however it already
-does for its own errors (this package has no logging dependency of its
-own — see 0.1.1). Never emitted for an expected platform absence
-(desktop / web registering no metered handler); that isn't a failure.
-Named `ConnectivityException`, not `ConnectivityError` — this is an
-expected, already-recovered-from condition, not a Dart `Error` (a
-programmer bug that should propagate to a zone handler).
+of every non-fatal fault this package catches internally. Each already has
+a safe fallback in effect by the time it's emitted; this exists purely so a
+consumer can log or react to it however it already does for its own errors
+(this package has no logging dependency of its own — see 0.1.1). Never
+emitted for an expected platform absence (desktop / web registering no
+metered handler); that isn't a failure.
+
+`ConnectivityException` is `sealed` and `implements Exception` — not
+`extends Error`, since this is an expected, already-recovered-from
+condition, not a programmer bug that should propagate to a zone handler.
+Four concrete causes, each carrying the raw caught `exception` and
+`stackTrace`:
+
+- `ConnectivitySeedException` — the construction-time seed probe faulted.
+- `ConnectivityStreamException` — the adapter's `observeConnectivity`
+  stream itself emitted an error.
+- `ConnectivityMeteredProbeException` — the native metered-probe channel
+  faulted.
+- `ConnectivityMeteredProbeTimeoutException` — the native metered-probe
+  channel outran its timeout.
+
+Being `sealed` makes a consumer's `switch` over these four an exhaustiveness
+contract enforced at compile time, not a guess from a free-text message.
 
 ## 0.1.1
 

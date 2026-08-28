@@ -93,21 +93,47 @@ accidentally couple to the implementation instead of the contract.
 
 This package has no logging dependency of its own — it never decides how a
 failure gets recorded. Instead, every non-fatal fault it catches internally
-(a seed probe fault, an adapter stream error, a metered-probe fault or
-timeout) is emitted on `exceptions`:
+is emitted on `exceptions` as one of four concrete, `sealed`-enforced
+causes:
+
+```dart
+sealed class ConnectivityException implements Exception {
+  final Object exception;
+  final StackTrace stackTrace;
+}
+
+final class ConnectivitySeedException extends ConnectivityException {}
+final class ConnectivityStreamException extends ConnectivityException {}
+final class ConnectivityMeteredProbeException extends ConnectivityException {}
+final class ConnectivityMeteredProbeTimeoutException extends ConnectivityException {}
+```
+
+`implements Exception`, not `extends Error` — this is an expected,
+already-recovered-from condition worth knowing about, not a Dart `Error` (a
+programmer bug that should propagate to a zone handler, never be caught and
+reported like this). `sealed` so a consumer's `switch` is a coverage
+contract, not a guess from a free-text message — a fifth cause added later
+fails to compile until every `switch` handles it:
 
 ```dart
 connectivity.exceptions.listen((ConnectivityException e) {
+  final String cause = switch (e) {
+    ConnectivitySeedException() => 'seed probe failed',
+    ConnectivityStreamException() => 'connectivity stream errored',
+    ConnectivityMeteredProbeException() => 'metered probe failed',
+    ConnectivityMeteredProbeTimeoutException() => 'metered probe timed out',
+  };
   // Wire this into whatever the app already uses — log_system, Crashlytics,
   // a debug banner. This package has no opinion on which.
-  myLogger.warning(e.context, error: e.exception, stackTrace: e.stackTrace);
+  myLogger.warning(cause, error: e.exception, stackTrace: e.stackTrace);
 });
 ```
 
-Named `ConnectivityException`, not `ConnectivityError` — this is an
-expected, already-recovered-from condition worth knowing about, not a Dart
-`Error` (a programmer bug that should propagate to a zone handler, never be
-caught and reported like this).
+Unlike a typical project-scoped domain exception, each subclass still
+carries the raw caught `exception` rather than only domain-relevant fields:
+this package has no redactor of its own to translate a platform fault
+safely first, so the raw value is the consumer's own logger's to read (and
+redact, if it needs to).
 
 Every occurrence already has a safe fallback in effect by the time it's
 emitted — `getStatus()` and `observeStatus()` keep working regardless of

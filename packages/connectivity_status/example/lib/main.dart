@@ -14,12 +14,20 @@ void main() {
   // instead and inject the result via the plain constructors.
   final ConnectivityRepository connectivity = ConnectivityRepository();
 
-  // This package has no logging dependency of its own — errors are just a
-  // stream. debugPrint here stands in for whatever an app already uses
-  // (log_system, Crashlytics, ...).
-  connectivity.exceptions.listen(
-    (ConnectivityException exception) => debugPrint(exception.toString()),
-  );
+  // This package has no logging dependency of its own — exceptions are just
+  // a stream. debugPrint here stands in for whatever an app already uses
+  // (log_system, Crashlytics, ...). The switch is exhaustive over
+  // ConnectivityException's four concrete causes — a fifth added later
+  // would fail to compile here until this arm list is updated too.
+  connectivity.exceptions.listen((ConnectivityException e) {
+    final String cause = switch (e) {
+      ConnectivitySeedException() => 'seed probe failed',
+      ConnectivityStreamException() => 'connectivity stream errored',
+      ConnectivityMeteredProbeException() => 'metered probe failed',
+      ConnectivityMeteredProbeTimeoutException() => 'metered probe timed out',
+    };
+    debugPrint('$cause: ${e.exception}');
+  });
 
   runApp(
     MyApp(

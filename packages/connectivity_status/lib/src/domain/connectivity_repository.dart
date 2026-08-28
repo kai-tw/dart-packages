@@ -34,12 +34,14 @@ abstract class ConnectivityRepository {
   /// ```
   factory ConnectivityRepository() = ConnectivityRepositoryImpl.create;
 
-  /// Non-fatal failures observed internally — a seed probe fault, a stream
-  /// error, a metered-probe fault or timeout. Every one already has a safe
-  /// fallback in effect by the time it's emitted here; this exists so a
-  /// consumer can log or react to it however it already does for its own
-  /// errors. Never emits for an expected platform absence (desktop / web
-  /// registering no metered handler) — that isn't a failure.
+  /// Non-fatal failures observed internally — one of [ConnectivitySeedException],
+  /// [ConnectivityStreamException], [ConnectivityMeteredProbeException], or
+  /// [ConnectivityMeteredProbeTimeoutException]. Every one already has a
+  /// safe fallback in effect by the time it's emitted here; this exists so
+  /// a consumer can log or react to it however it already does for its own
+  /// errors — `switch` over the sealed type for exhaustive handling. Never
+  /// emits for an expected platform absence (desktop / web registering no
+  /// metered handler) — that isn't a failure.
   Stream<ConnectivityException> get exceptions;
 
   /// One-shot query for the current network state.

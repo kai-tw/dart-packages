@@ -624,7 +624,7 @@ void main() {
         );
         expect(
           exceptions,
-          <Matcher>[isA<ConnectivityException>()],
+          <Matcher>[isA<ConnectivityMeteredProbeException>()],
           reason:
               'A caught PlatformException is still a fault worth a consumer '
               'knowing about, even though getStatus() itself absorbs it.',
@@ -668,6 +668,10 @@ void main() {
 
         expect(status, equals(ConnectivityStatus.cellular));
         expect(fake.callCount, isPositive);
+        expect(
+          exceptions,
+          <Matcher>[isA<ConnectivityMeteredProbeTimeoutException>()],
+        );
         expect(exceptions.single.exception, same(fake.throwWith));
       },
     );
@@ -810,6 +814,7 @@ void main() {
             'add ConnectivityStatus.offline to the subject rather than '
             'leaving the subject empty.',
       );
+      expect(exceptions.single, isA<ConnectivitySeedException>());
       expect(exceptions.single.exception, same(fault));
     });
 
@@ -842,6 +847,7 @@ void main() {
               'A stream error keeps the last known status rather than '
               'resetting to offline or propagating onto observeStatus().',
         );
+        expect(exceptions.single, isA<ConnectivityStreamException>());
         expect(exceptions.single.exception, same(fault));
 
         await controller.close();

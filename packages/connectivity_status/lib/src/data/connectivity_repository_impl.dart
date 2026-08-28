@@ -50,13 +50,7 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
     try {
       _subject.add(await getStatus());
     } on PlatformException catch (e, s) {
-      _exceptions.add(
-        ConnectivityException(
-          'Connectivity seed failed → fallback offline',
-          e,
-          s,
-        ),
-      );
+      _exceptions.add(ConnectivitySeedException(e, s));
       _subject.add(ConnectivityStatus.offline);
     }
 
@@ -73,13 +67,7 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
   // Keeps the last known status rather than forwarding the error onto
   // [_subject] — [exceptions] is where a consumer observes this instead.
   void _onStreamError(Object error, StackTrace stackTrace) {
-    _exceptions.add(
-      ConnectivityException(
-        'Connectivity adapter stream emitted error → keeping last known status',
-        error,
-        stackTrace,
-      ),
-    );
+    _exceptions.add(ConnectivityStreamException(error, stackTrace));
   }
 
   @override
@@ -132,23 +120,11 @@ class ConnectivityRepositoryImpl implements ConnectivityRepository {
       // Mobile metered probe faulted (e.g. a missing ACCESS_NETWORK_STATE
       // surfacing as a SecurityException) → degrade to the type-list heuristic
       // rather than fail the download gate.
-      _exceptions.add(
-        ConnectivityException(
-          'Metered probe failed → heuristic fallback',
-          e,
-          stackTrace,
-        ),
-      );
+      _exceptions.add(ConnectivityMeteredProbeException(e, stackTrace));
       return null;
     } on TimeoutException catch (e, stackTrace) {
       // Probe outran its timeout → same heuristic fallback.
-      _exceptions.add(
-        ConnectivityException(
-          'Metered probe timed out → heuristic fallback',
-          e,
-          stackTrace,
-        ),
-      );
+      _exceptions.add(ConnectivityMeteredProbeTimeoutException(e, stackTrace));
       return null;
     }
   }
