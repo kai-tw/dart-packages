@@ -274,6 +274,37 @@ class WidgetGoneException extends FlutterError {}
     );
   });
 
+  group('a `.design.dart` marker names the class beneath it', () {
+    test('[partition] the class beneath the marker matches', () {
+      expect(
+        _lint('class WelcomeView {}', path: 'lib/welcome_view.design.dart'),
+        isEmpty,
+      );
+    });
+
+    test(
+      '[boundary] a stale class left behind by a rename still reports — '
+      'the marker adjusts the basename, it does not exempt the file',
+      () {
+        final List<LintViolation> found = _lint(
+          'class OnboardingWelcomeStep {}',
+          path: 'lib/welcome_view.design.dart',
+        );
+        expect(found, hasLength(1));
+        expect(found.single.message, contains('welcome_view.dart'));
+      },
+    );
+
+    test('[boundary] an unrelated second class in it still reports', () {
+      final List<LintViolation> found = _lint(
+        'class WelcomeView {}\nclass Helper {}',
+        path: 'lib/welcome_view.design.dart',
+      );
+      expect(found, hasLength(1));
+      expect(found.single.message, contains("'Helper'"));
+    });
+  });
+
   group('files the rule has no claim on', () {
     test('[partition] a part-of fragment is addressed by its library', () {
       expect(

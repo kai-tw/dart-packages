@@ -1,3 +1,19 @@
+## 0.4.6
+
+`public_class_names_its_file` treated a `.design.dart` marker suffix as part
+of the basename to match, so `welcome_view.design.dart` was compared against
+the class name `welcome_view.design` — no class ever matches that, so every
+`.design.dart` file reported "no public class names this file" regardless of
+what was actually inside.
+
+Fixed by stripping `.design.dart` as a unit before falling back to plain
+`.dart`, so `welcome_view.design.dart` is now compared against `WelcomeView`
+as intended. This is a basename adjustment, not an exemption — a stale class
+left behind by a rename, or an unrelated second class, still reports inside
+a `.design.dart` file exactly as it would in any other. Only the `.design`
+marker is special-cased; a file like `foo.bar.dart` still loses only the
+trailing `.dart`.
+
 ## 0.4.5
 
 `avoid_layer_violation` never actually fired in any project that requires

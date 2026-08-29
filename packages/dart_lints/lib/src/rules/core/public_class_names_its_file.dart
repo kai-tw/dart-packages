@@ -18,6 +18,14 @@ import '../../lint_rule_base.dart';
 /// `download_manager_task_list_item_icon.dart`) reads as correct at every call
 /// site and is only visible against the filename.
 ///
+/// A `.design.dart` marker suffix names the class beneath it, not itself:
+/// `welcome_view.design.dart` must still answer to `WelcomeView`. The suffix
+/// is a house convention flagging a file another role owns and this one
+/// should not casually edit — the class inside is exactly as real as any
+/// other, so this is a basename adjustment, not an exemption: a second
+/// unrelated class in a `.design.dart` file, or a class whose name does not
+/// match, still reports.
+///
 /// Not flagged — a companion type has an owner, which is the thing the rule is
 /// actually protecting:
 /// - A class whose name **starts with** the primary's (`ReaderGotoUseCase` +
@@ -253,6 +261,10 @@ class _Visitor extends LintVisitor {
   String _baseName() {
     final int slash = filePath.lastIndexOf('/');
     final String file = slash < 0 ? filePath : filePath.substring(slash + 1);
+    const String designSuffix = '.design.dart';
+    if (file.endsWith(designSuffix)) {
+      return file.substring(0, file.length - designSuffix.length);
+    }
     return file.endsWith('.dart')
         ? file.substring(0, file.length - '.dart'.length)
         : file;
