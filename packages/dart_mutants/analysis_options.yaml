@@ -1,0 +1,3 @@
+# Extends the workspace configuration rather than replacing it, so this package
+# is held to the same rules as everything else here.
+include: ../../analysis_options.yaml

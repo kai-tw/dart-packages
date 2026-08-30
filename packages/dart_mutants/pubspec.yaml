@@ -1,0 +1,22 @@
+name: dart_mutants
+description: >-
+  AST-based mutation testing for Dart and Flutter. Covers the constructs a
+  regex-based mutator cannot see at all — the ternary, a switch expression's
+  arms, null-coalescing — by walking the same analyzer AST dart_lints already
+  does, not by pattern-matching source text.
+version: 0.1.0
+repository: https://github.com/kai-tw/kai-packages/tree/main/packages/dart_mutants
+
+environment:
+  sdk: ^3.8.0
+
+resolution: workspace
+
+dependencies:
+  analyzer: ">=9.0.0 <11.0.0"
+  args: ^2.5.0
+  path: ^1.9.0
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.25.0

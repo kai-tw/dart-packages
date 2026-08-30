@@ -1,0 +1,149 @@
+import 'dart:io';
+
+import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/analysis/utilities.dart';
+
+import '../generated_file_filter.dart';
+import '../mutant.dart';
+import '../mutation_operator.dart';
+import '../mutation_visitor.dart';
+import '../operators.dart';
+import 'compile_safety_gate.dart';
+import 'file_mutation_report.dart';
+import 'mutant_result.dart';
+import 'mutant_verdict.dart';
+import 'mutated_file_registry.dart';
+import 'mutation_run_report.dart';
+import 'process_command.dart';
+
+/// Runs every operator's mutants against [testCommand], one at a time, and
+/// scores the result.
+///
+/// The contract this whole package exists to serve: hand it a file list and
+/// a test command, get back per-file totals and the actual survivors. Which
+/// files to pass, whether the score is good enough, and what to do about a
+/// surviving mutant are all outside this class on purpose — that is policy,
+/// decided by whoever calls this, not by the engine running the mutants.
+class MutationTestRunner {
+  MutationTestRunner({
+    required this.testCommand,
+    required this.compileSafetyGate,
+    List<MutationOperator>? operators,
+  }) : operators = operators ?? defaultOperators();
+
+  final ProcessCommand testCommand;
+  final CompileSafetyGate compileSafetyGate;
+  final List<MutationOperator> operators;
+
+  final MutatedFileRegistry _registry = MutatedFileRegistry();
+
+  /// Runs the full session over [filePaths]. Generated files are dropped
+  /// silently — they are never a meaningful target, not a policy choice a
+  /// caller needs to make per run — everything else needs the caller to have
+  /// already decided it belongs in this run; this class does not further
+  /// filter by "was it actually covered" or any other policy question.
+  ///
+  /// Refuses to run at all if [testCommand] does not pass unmodified first:
+  /// scoring mutants against a suite that was already red makes every one of
+  /// them look detected, for a reason that has nothing to do with the
+  /// mutation.
+  Future<MutationRunReport> run(List<String> filePaths) async {
+    final List<String> targets = filePaths
+        .where((String path) => !isGeneratedFile(path))
+        .toList();
+
+    final int baselineExitCode = await testCommand.run();
+    if (baselineExitCode != 0) {
+      return MutationRunReport.aborted(
+        'the test command failed against unmodified code (exit '
+        '$baselineExitCode) — refusing to score mutants against a baseline '
+        'that was already red',
+      );
+    }
+
+    _registry.armSignalRestore();
+    try {
+      final List<FileMutationReport> fileReports = <FileMutationReport>[];
+      for (final String filePath in targets) {
+        fileReports.add(await _runFile(filePath));
+      }
+      return MutationRunReport.completed(fileReports);
+    } finally {
+      // A safety net, not the primary mechanism — _runOne already restores
+      // after every individual mutant. This only fires if something escaped
+      // before that: at most one file's worth of cleanup, never a whole
+      // run's worth.
+      _registry.restoreAll();
+      await _registry.disarm();
+    }
+  }
+
+  Future<FileMutationReport> _runFile(String filePath) async {
+    final String originalSource = await File(filePath).readAsString();
+    final List<Mutant> mutants = _collectMutants(filePath, originalSource);
+
+    int detected = 0;
+    int undetected = 0;
+    int invalid = 0;
+    final List<MutantResult> undetectedResults = <MutantResult>[];
+
+    for (final Mutant mutant in mutants) {
+      final MutantVerdict verdict = await _runOne(mutant, originalSource);
+      switch (verdict) {
+        case MutantVerdict.invalid:
+          invalid++;
+        case MutantVerdict.detected:
+          detected++;
+        case MutantVerdict.undetected:
+          undetected++;
+          undetectedResults.add(
+            MutantResult(mutant: mutant, verdict: verdict),
+          );
+      }
+    }
+
+    return FileMutationReport(
+      filePath: filePath,
+      detected: detected,
+      undetected: undetected,
+      invalid: invalid,
+      undetectedMutants: undetectedResults,
+    );
+  }
+
+  List<Mutant> _collectMutants(String filePath, String source) {
+    final ParseStringResult parsed = parseString(
+      content: source,
+      throwIfDiagnostics: false,
+    );
+    final List<Mutant> mutants = <Mutant>[];
+    for (final MutationOperator operator in operators) {
+      final MutationVisitor visitor = operator.createVisitor(
+        filePath,
+        parsed.lineInfo,
+        source,
+      );
+      parsed.unit.accept(visitor);
+      mutants.addAll(visitor.mutants);
+    }
+    return mutants;
+  }
+
+  /// Applies [mutant] to disk, checks compile-safety, runs [testCommand] if
+  /// it passed that gate, then restores the file before returning —
+  /// regardless of which branch was taken, so a thrown exception here still
+  /// leaves the file clean.
+  Future<MutantVerdict> _runOne(Mutant mutant, String originalSource) async {
+    _registry.track(mutant.filePath, originalSource);
+    await File(mutant.filePath).writeAsString(mutant.applyTo(originalSource));
+    try {
+      if (!await compileSafetyGate.compiles(mutant.filePath)) {
+        return MutantVerdict.invalid;
+      }
+      final int exitCode = await testCommand.run();
+      return exitCode == 0 ? MutantVerdict.undetected : MutantVerdict.detected;
+    } finally {
+      _registry.restore(mutant.filePath);
+    }
+  }
+}

@@ -10,6 +10,7 @@ environment:
 workspace:
   - packages/connectivity_status
   - packages/dart_lints
+  - packages/dart_mutants
   - packages/hybrid_logical_clock
   - packages/log_system
   - packages/preference_store
