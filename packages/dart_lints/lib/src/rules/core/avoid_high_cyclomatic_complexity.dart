@@ -31,6 +31,27 @@ import '../../lint_rule_base.dart';
 /// every case before them, they test nothing new, the same reasoning that
 /// excludes an `if` with no `else` from needing a phantom second branch.
 ///
+/// **`??` has one exemption: `field ?? this.field`.** When both sides are a
+/// bare name or one level of property access — no call, no further
+/// chaining — it does not count. This is `copyWith`'s entire body for a
+/// data class: N fields, N copies of the exact same idiom, and unlike N
+/// genuinely different conditions, those branches are not independent
+/// evidence a test suite has to earn one at a time. One call with every
+/// field provided covers every site's "use the new value" side at once;
+/// one bare `copyWith()` covers every site's "keep the old value" side at
+/// once — the branches are perfectly correlated because they are the same
+/// idiom repeated, not N different behaviours, and there is no extract-
+/// method split available either (moving `field ?? this.field` into its
+/// own one-line helper per field relocates the same total count, it does
+/// not reduce it). The moment either side is a call or two levels deep
+/// (`title.hashCode`, `this.title.abs()`), this is no longer "keep the
+/// field unchanged" — it goes back to counting normally. A `T? Function()?`
+/// "thunk" used to distinguish "not provided" from "explicitly cleared"
+/// (`field != null ? field() : this.field`) is a ternary, not a `??`, and
+/// this exemption never touches it — that third state is real, field-
+/// specific behaviour a plain `??` cannot even express, so it keeps its own
+/// branch point same as before.
+///
 /// **Each function, method, constructor, and closure is its own unit.** A
 /// closure passed to `.map` or a `builder:` callback is not folded into its
 /// enclosing method's count — Dart's heavy use of inline closures (widget
@@ -199,7 +220,7 @@ class _Visitor extends LintVisitor {
 class _ComplexityCounter extends RecursiveAstVisitor<void> {
   int complexity = 1;
 
-  static const Set<String> _branchingOperators = <String>{'&&', '||', '??'};
+  static const Set<String> _branchingOperators = <String>{'&&', '||'};
 
   void _guard(GuardedPattern guardedPattern) {
     if (guardedPattern.whenClause != null) {
@@ -281,11 +302,47 @@ class _ComplexityCounter extends RecursiveAstVisitor<void> {
 
   @override
   void visitBinaryExpression(BinaryExpression node) {
-    if (_branchingOperators.contains(node.operator.lexeme)) {
+    final String operator = node.operator.lexeme;
+    if (operator == '??') {
+      if (!_isSimpleAccess(node.leftOperand) ||
+          !_isSimpleAccess(node.rightOperand)) {
+        complexity++;
+      }
+    } else if (_branchingOperators.contains(operator)) {
       complexity++;
     }
     super.visitBinaryExpression(node);
   }
+
+  /// A bare name (`title`), `this`, or one level of property access off
+  /// either (`this.title`, `other.title`) — no call, no further chaining.
+  ///
+  /// This is `??`'s one exemption: `field ?? this.field`, repeated once per
+  /// field, is `copyWith`'s entire body for a data class with N fields —
+  /// and unlike N genuinely different conditions, these branches are not
+  /// independent evidence a test suite has to earn one at a time. A test
+  /// that passes every field covers every site's "use the new value" side
+  /// at once; a bare `copyWith()` covers every site's "keep the old value"
+  /// side at once — the branches are perfectly correlated because they are
+  /// the same idiom repeated, not N different behaviours. `this.title` (a
+  /// bare field) and `title.hashCode` or `this.title.abs()` (a call, or two
+  /// levels deep) are different claims — the moment a call or a second
+  /// level of chaining appears, this is no longer "keep the field
+  /// unchanged," so it goes back to counting normally.
+  bool _isSimpleAccess(Expression e) {
+    if (e is SimpleIdentifier || e is ThisExpression) {
+      return true;
+    }
+    if (e is PrefixedIdentifier) {
+      return _isBareReference(e.prefix);
+    }
+    if (e is PropertyAccess && e.target != null) {
+      return _isBareReference(e.target!);
+    }
+    return false;
+  }
+
+  bool _isBareReference(Expression e) => e is SimpleIdentifier || e is ThisExpression;
 
   @override
   void visitConditionalExpression(ConditionalExpression node) {

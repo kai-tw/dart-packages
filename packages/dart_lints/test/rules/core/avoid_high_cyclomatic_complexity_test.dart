@@ -140,9 +140,11 @@ void f() {
         _measuredComplexity('bool f(bool a, bool b, bool c) => a && b || c;'),
         3,
       );
+      // Calls on both sides of each ??, not simple access — see the
+      // dedicated group below for the field-defaulting exemption itself.
       expect(
         _measuredComplexity(
-          "String f(String? a, String? b) => a ?? b ?? 'd';",
+          "String f() => a() ?? b() ?? 'd';",
         ),
         3,
       );
@@ -171,6 +173,94 @@ void f() {
       );
     });
   });
+
+  group(
+    '?? does not count when both sides are simple access — the '
+    'field-defaulting exemption',
+    () {
+      test('[partition] field ?? this.field does not count', () {
+        expect(
+          _measuredComplexity(
+            'class C { int x = 0; C f(int? x) => C()..x = x ?? this.x; }',
+          ),
+          1,
+        );
+      });
+
+      test('[partition] two bare identifiers do not count', () {
+        expect(_measuredComplexity('int f(int? a, int b) => a ?? b;'), 1);
+      });
+
+      test(
+        '[partition] a field on any simple base counts as field access too '
+        '— not only this',
+        () {
+          expect(
+            _measuredComplexity(
+              'int f(int? a, C other) => a ?? other.x;',
+            ),
+            1,
+          );
+        },
+      );
+
+      test(
+        '[boundary] a call on either side still counts — this is no longer '
+        '"keep the field unchanged"',
+        () {
+          expect(_measuredComplexity('int f(int? a) => a ?? compute();'), 2);
+          expect(_measuredComplexity('int f(int? a) => compute() ?? a;'), 2);
+        },
+      );
+
+      test(
+        '[boundary] two levels of property access still counts — one level '
+        'is the line, not "no chaining at all"',
+        () {
+          expect(
+            _measuredComplexity(
+              'class C { int x = 0; int f(int? a) => a ?? this.x.hashCode; }',
+            ),
+            2,
+          );
+        },
+      );
+
+      test(
+        '[boundary] a realistic copyWith stays low regardless of field '
+        'count — this is the whole point',
+        () {
+          expect(
+            _measuredComplexity('''
+class C {
+  C copyWith({int? a, int? b, int? c, int? d, int? e}) => C()
+    ..a = a ?? this.a
+    ..b = b ?? this.b
+    ..c = c ?? this.c
+    ..d = d ?? this.d
+    ..e = e ?? this.e;
+}
+'''),
+            1,
+          );
+        },
+      );
+
+      test(
+        '[partition] the clear-to-null thunk ternary is untouched — it is '
+        'not a ??, this exemption never reaches it',
+        () {
+          expect(
+            _measuredComplexity(
+              'class C { int x = 0; C f(int? Function()? x) => '
+              'C()..x = x != null ? x() : this.x; }',
+            ),
+            2,
+          );
+        },
+      );
+    },
+  );
 
   group('switch cases are decision points, default and wildcard are not', () {
     test('[partition] each value case adds 1, default does not', () {

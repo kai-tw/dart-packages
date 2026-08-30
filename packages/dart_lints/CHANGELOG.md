@@ -1,3 +1,29 @@
+## 0.5.2
+
+`avoid_high_cyclomatic_complexity` stops counting `??` when both sides are
+simple access — a bare name, `this.field`, or one level of property access
+off either, with no call and no further chaining. `field ?? this.field`,
+repeated once per field, is a data class's entire `copyWith` body; unlike N
+genuinely different conditions, those branches are not independent
+evidence a test suite has to earn one at a time — a call with every field
+provided covers every site's "use the new value" side at once, and a bare
+`copyWith()` covers every site's "keep the old value" side at once. There
+is no extract-method escape either: moving `field ?? this.field` into its
+own one-line helper per field relocates the same total count, it does not
+reduce it. Verified against 20 real `copyWith` methods: 14 now measure
+within a reasonable ceiling; the remaining 6 still exceed it, correctly —
+each has 10+ fields using the `T? Function()?` "clear-to-null" thunk
+pattern (`field != null ? field() : this.field`), which is a ternary, not
+a `??`, so this exemption never touches it. That third state (explicitly
+clearing a field, as opposed to not providing it) is real, field-specific
+behaviour a plain `??` cannot even express, and keeps its own branch point
+exactly as before.
+
+The moment either side is a call or two levels of property access deep
+(`title.hashCode`, `this.title.abs()`), this is no longer "keep the field
+unchanged" and counting reverts to normal — this is a narrow, structural
+exemption for one specific idiom, not a general loosening of `??`.
+
 ## 0.5.1
 
 0.5.0 broke `dart run dart_lints` entirely — not just the new rule — for
