@@ -29,11 +29,18 @@ class MutationTestRunner {
     required this.testCommand,
     required this.compileSafetyGate,
     List<MutationOperator>? operators,
+    this.mutantTimeout = const Duration(seconds: 30),
   }) : operators = operators ?? defaultOperators();
 
   final ProcessCommand testCommand;
   final CompileSafetyGate compileSafetyGate;
   final List<MutationOperator> operators;
+
+  /// How long [testCommand] gets before a run is killed and scored as
+  /// [MutantVerdict.timeout] instead of waited on forever. Applied to the
+  /// baseline check too — an already-hanging test command is exactly as
+  /// unusable a baseline as an already-failing one.
+  final Duration mutantTimeout;
 
   final MutatedFileRegistry _registry = MutatedFileRegistry();
 
@@ -52,7 +59,16 @@ class MutationTestRunner {
         .where((String path) => !isGeneratedFile(path))
         .toList();
 
-    final int baselineExitCode = await testCommand.run();
+    final int? baselineExitCode = await testCommand.run(
+      timeout: mutantTimeout,
+    );
+    if (baselineExitCode == null) {
+      return const MutationRunReport.aborted(
+        'the test command did not finish against unmodified code within '
+        'the timeout — refusing to score mutants against a baseline that '
+        'never even completes',
+      );
+    }
     if (baselineExitCode != 0) {
       return MutationRunReport.aborted(
         'the test command failed against unmodified code (exit '
@@ -85,6 +101,7 @@ class MutationTestRunner {
     int detected = 0;
     int undetected = 0;
     int invalid = 0;
+    int timedOut = 0;
     final List<MutantResult> undetectedResults = <MutantResult>[];
 
     for (final Mutant mutant in mutants) {
@@ -92,6 +109,8 @@ class MutationTestRunner {
       switch (verdict) {
         case MutantVerdict.invalid:
           invalid++;
+        case MutantVerdict.timeout:
+          timedOut++;
         case MutantVerdict.detected:
           detected++;
         case MutantVerdict.undetected:
@@ -107,6 +126,7 @@ class MutationTestRunner {
       detected: detected,
       undetected: undetected,
       invalid: invalid,
+      timedOut: timedOut,
       undetectedMutants: undetectedResults,
     );
   }
@@ -140,7 +160,19 @@ class MutationTestRunner {
       if (!await compileSafetyGate.compiles(mutant.filePath)) {
         return MutantVerdict.invalid;
       }
-      final int exitCode = await testCommand.run();
+      final int? exitCode = await testCommand.run(timeout: mutantTimeout);
+      if (exitCode == null) {
+        // A mutant that hangs the suite is not neutral evidence — it often
+        // means the mutation introduced a genuine infinite loop, which is
+        // arguably the mutation actually changing behaviour. But counting it
+        // as "detected" would let a hang inflate the score in exactly the
+        // wrong direction the compile-safety gate exists to prevent for
+        // invalid mutants: a number that looks better while representing a
+        // test that never actually ran to a real assertion. Kept as its own
+        // bucket, excluded from the score like `invalid`, rather than
+        // guessed into either side.
+        return MutantVerdict.timeout;
+      }
       return exitCode == 0 ? MutantVerdict.undetected : MutantVerdict.detected;
     } finally {
       _registry.restore(mutant.filePath);

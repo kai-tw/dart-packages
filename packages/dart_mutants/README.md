@@ -44,13 +44,49 @@ against the project's own analyzer before it is ever handed to the test
 command; one that fails compiles is `invalid` and excluded from both the
 numerator and denominator of the score, not counted as caught.
 
+## The timeout gate
+
+A mutant can turn a normal loop into an infinite one — sometimes the most
+real signal a mutation testing tool can produce. But `package:test`'s own
+per-test timeout is cooperative, built on the event loop, and cannot
+preempt a synchronous `while (true) {}` that never yields to it; this
+package's own subprocess would then wait on the test command forever. Every
+mutant's test run is bounded by `--mutant-timeout` (default 30s, applied to
+the baseline check too) and killed with `SIGKILL` — which cannot be
+ignored — if it does not finish in time. A timed-out mutant is scored
+`timeout`, not `detected`: a hang is not the same evidence as an assertion
+actually catching the wrong output, and counting it as caught would inflate
+the score the same way an uncompilable mutant would.
+
 ## What this package does not decide
 
 Which files to run against, how big a mutant budget to spend, what
 detection rate is acceptable, and what a surviving mutant's write-up should
 look like are policy — that lives one layer up, in whatever calls this. The
 contract here is a file list and a test command in, per-file
-detected/undetected/invalid counts and the actual undetected mutants out.
+detected/undetected/invalid/timeout counts and the actual undetected
+mutants out.
+
+## The output contract
+
+These three are guaranteed, not incidental — a caller with its own
+pass/fail policy (a per-file threshold other than "zero undetected", for
+instance) depends on all three, and each is covered by a test against the
+real CLI binary, not just the internal report types:
+
+- **`--json` always prints a complete report to stdout, even when the exit
+  code is non-zero** — an aborted run, or any file with undetected mutants.
+  Nothing about this binary's own exit-code opinion suppresses the report a
+  caller needs to read to form its own.
+- **A file with zero candidate mutants still appears in `files`**, at
+  `total: 0`. "This file had no mutants" and "this file was never passed
+  in" are different facts; only the JSON, not the exit code or the absence
+  of a key, can tell a caller which one happened.
+- **`invalid` and `timeout` stay in the per-file output**, not folded into
+  `total` or summed away. A file where most candidates ended up `invalid`
+  or `timeout` has a hollow-looking 100% the same way a file with only one
+  real mutant does — comparing either against `total` is how a policy layer
+  catches that, so both are reported, not just counted internally.
 
 ## Known limitations
 

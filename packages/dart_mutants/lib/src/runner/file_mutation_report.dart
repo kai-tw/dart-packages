@@ -2,16 +2,22 @@ import 'mutant_result.dart';
 
 /// One file's mutants, scored.
 ///
-/// [total] is [detected] + [undetected] — [invalid] is deliberately not
-/// folded in. An invalid mutant was never a real question about this file's
-/// tests, so counting it either way would move the score without the tests
-/// having done anything to earn or lose it.
+/// [total] is [detected] + [undetected] — [invalid] and [timedOut] are
+/// deliberately not folded in. Neither was a real question about this
+/// file's tests, so counting either either way would move the score without
+/// the tests having done anything to earn or lose it. They still matter as
+/// a signal of their own, separate from the score: a file where most
+/// candidates ended up `invalid` has a hollow-looking 100% the same way a
+/// file with only one real mutant does — a policy layer comparing
+/// `invalid`/`timedOut` against `total` is how that gets caught, which is
+/// exactly why both stay in this report instead of being summed away.
 class FileMutationReport {
   const FileMutationReport({
     required this.filePath,
     required this.detected,
     required this.undetected,
     required this.invalid,
+    required this.timedOut,
     required this.undetectedMutants,
   });
 
@@ -19,6 +25,7 @@ class FileMutationReport {
   final int detected;
   final int undetected;
   final int invalid;
+  final int timedOut;
 
   /// The actual survivors, not just their count — a policy layer deciding
   /// pass/fail per file needs to show a person which ones, so they can write
@@ -37,6 +44,7 @@ class FileMutationReport {
     'detected': detected,
     'undetected': undetected,
     'invalid': invalid,
+    'timedOut': timedOut,
     'undetectedMutants': undetectedMutants
         .map((MutantResult r) => r.toJson())
         .toList(),

@@ -5,6 +5,17 @@ enum MutantVerdict {
   /// invalid mutant is not evidence of anything, in either direction.
   invalid,
 
+  /// The test command did not finish within the configured timeout and was
+  /// killed. Excluded from the score, the same as [invalid] — not folded
+  /// into `detected`, even though a hang often means the mutation did
+  /// change behaviour (a genuine infinite loop): counting it as caught
+  /// would let a hung test inflate the score the same way a mutant that
+  /// fails to compile would, which is exactly the failure shape the
+  /// compile-safety gate exists to prevent for that case. Not folded into
+  /// `undetected` either — nothing actually ran to a real assertion, so
+  /// there is no basis to call it a survivor.
+  timeout,
+
   /// The test command exited non-zero against a mutant that compiled: some
   /// test noticed. Counts toward the denominator and is good news.
   detected,

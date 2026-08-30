@@ -1,0 +1,115 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
+
+/// A caller scoring per-file at a threshold other than "zero undetected"
+/// (e.g. a per-file 80% pass bar) depends on reading `--json` even when
+/// this binary's own exit code disagrees with their verdict. This drives
+/// the real CLI binary end to end and asserts on real stdout — the
+/// property under test is specifically about what actually reaches stdout
+/// before the process exits, which a unit test against `MutationRunReport`
+/// alone cannot observe.
+final String _binPath = p.join(
+  Directory.current.path,
+  'bin',
+  'dart_mutants.dart',
+);
+
+Future<Directory> _fixtureWithOneUndetectedMutant() async {
+  final Directory dir = Directory.systemTemp.createTempSync(
+    'cli_json_contract_test_',
+  );
+  File(p.join(dir.path, 'pubspec.yaml')).writeAsStringSync('''
+name: fixture
+environment:
+  sdk: ^3.8.0
+dev_dependencies:
+  test: ^1.25.0
+''');
+  Directory(p.join(dir.path, 'lib')).createSync();
+  Directory(p.join(dir.path, 'test')).createSync();
+  // Never called by any test — its one ternary mutant is guaranteed
+  // undetected, which is what drives the CLI's exit code non-zero.
+  File(p.join(dir.path, 'lib', 'uncovered.dart')).writeAsStringSync(
+    "String classify(bool isPositive) => isPositive ? 'positive' : 'negative';\n",
+  );
+  // A real, passing, unrelated test — `dart test` treats a package with
+  // zero tests anywhere as itself a failure (exit 79), which would trip
+  // this package's own red-baseline check for the wrong reason. `classify`
+  // itself must stay uncalled so its one mutant is genuinely undetected.
+  File(p.join(dir.path, 'test', 'uncovered_test.dart')).writeAsStringSync(
+    "import 'package:test/test.dart';\n\nvoid main() { test('sanity', () => expect(1, 1)); }\n",
+  );
+  final ProcessResult pubGet = await Process.run('dart', <String>[
+    'pub',
+    'get',
+  ], workingDirectory: dir.path);
+  if (pubGet.exitCode != 0) {
+    throw StateError('dart pub get failed:\n${pubGet.stdout}\n${pubGet.stderr}');
+  }
+  return dir;
+}
+
+void main() {
+  test(
+    '[boundary] --json still prints a complete report to stdout when the '
+    'exit code is non-zero',
+    () async {
+      final Directory dir = await _fixtureWithOneUndetectedMutant();
+      addTearDown(() => dir.deleteSync(recursive: true));
+
+      final ProcessResult result = await Process.run('dart', <String>[
+        'run',
+        _binPath,
+        '--test-command',
+        'dart test',
+        '--json',
+        p.join(dir.path, 'lib', 'uncovered.dart'),
+      ], workingDirectory: dir.path);
+
+      expect(
+        result.exitCode,
+        isNot(0),
+        reason: 'an undetected mutant must make this binary exit non-zero',
+      );
+
+      final Object? decoded = jsonDecode(result.stdout as String);
+      expect(decoded, isA<Map<String, Object?>>());
+      final Map<String, Object?> json = decoded! as Map<String, Object?>;
+      final Map<String, Object?> files =
+          json['files']! as Map<String, Object?>;
+      final Map<String, Object?> fileReport =
+          files.values.single as Map<String, Object?>;
+      expect(fileReport['undetected'], 1);
+    },
+  );
+
+  test(
+    '[boundary] an aborted run (red baseline) still prints the abort '
+    'reason as valid JSON, with an empty files map, not nothing',
+    () async {
+      final Directory dir = await _fixtureWithOneUndetectedMutant();
+      addTearDown(() => dir.deleteSync(recursive: true));
+      File(p.join(dir.path, 'test', 'broken_test.dart')).writeAsStringSync(
+        "import 'package:test/test.dart';\n\nvoid main() { test('x', () => throw Exception('red')); }\n",
+      );
+
+      final ProcessResult result = await Process.run('dart', <String>[
+        'run',
+        _binPath,
+        '--test-command',
+        'dart test',
+        '--json',
+        p.join(dir.path, 'lib', 'uncovered.dart'),
+      ], workingDirectory: dir.path);
+
+      expect(result.exitCode, isNot(0));
+      final Map<String, Object?> json =
+          jsonDecode(result.stdout as String) as Map<String, Object?>;
+      expect(json['abortReason'], isNotNull);
+      expect(json['files'], isEmpty);
+    },
+  );
+}

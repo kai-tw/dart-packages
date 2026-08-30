@@ -75,6 +75,43 @@ void main() {
 }
 ''');
 
+  // no_mutants.dart: nothing any operator here touches at all — a file
+  // that is fully covered but produces zero candidates.
+  File(
+    p.join(dir.path, 'lib', 'no_mutants.dart'),
+  ).writeAsStringSync('String shout(String s) => s.toUpperCase();\n');
+  File(p.join(dir.path, 'test', 'no_mutants_test.dart')).writeAsStringSync('''
+import 'package:fixture/no_mutants.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('shouts', () => expect(shout('hi'), 'HI'));
+}
+''');
+
+  // hangs.dart: the original always takes the safe path (a real assertion
+  // covers exactly that), but swapping the ternary's branches routes into a
+  // genuine, synchronous, non-yielding infinite loop — the shape no
+  // event-loop-based test timeout can preempt.
+  File(p.join(dir.path, 'lib', 'hangs.dart')).writeAsStringSync('''
+String process(bool takeSafePath) => takeSafePath ? _safe() : _hang();
+
+String _safe() => 'ok';
+
+String _hang() {
+  // ignore: literal_only_boolean_expressions
+  while (true) {}
+}
+''');
+  File(p.join(dir.path, 'test', 'hangs_test.dart')).writeAsStringSync('''
+import 'package:fixture/hangs.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('takes the safe path', () => expect(process(true), 'ok'));
+}
+''');
+
   final ProcessResult pubGet = await Process.run('dart', <String>[
     'pub',
     'get',
@@ -92,6 +129,11 @@ MutationTestRunner _runnerFor(Directory dir) => MutationTestRunner(
   compileSafetyGate: const CompileSafetyGate(
     ProcessCommand('dart', <String>['analyze']),
   ),
+  // Short on purpose: every mutant in this fixture except hangs.dart's
+  // finishes near-instantly, and that one is specifically designed to
+  // never finish at all — a long timeout would only make this suite slower
+  // without testing anything a short one does not already cover.
+  mutantTimeout: const Duration(seconds: 5),
 );
 
 FileMutationReport _reportFor(MutationRunReport report, String name) =>
@@ -112,6 +154,8 @@ void main() {
         p.join(dir.path, 'lib', 'detected.dart'),
         p.join(dir.path, 'lib', 'undetected.dart'),
         p.join(dir.path, 'lib', 'invalid.dart'),
+        p.join(dir.path, 'lib', 'no_mutants.dart'),
+        p.join(dir.path, 'lib', 'hangs.dart'),
       ]);
     });
 
@@ -153,6 +197,48 @@ void main() {
           reason: 'the other mutant on this file compiles and is caught',
         );
         expect(f.undetected, 0);
+      },
+    );
+
+    test(
+      '[boundary] a file with zero candidate mutants still appears in the '
+      'report, at total 0 — "no mutants" and "not scanned" must stay '
+      'distinguishable to a caller',
+      () {
+        final FileMutationReport f = _reportFor(report, 'no_mutants.dart');
+        expect(f.total, 0);
+        expect(f.detectionRate, isNull);
+        expect(f.detected, 0);
+        expect(f.undetected, 0);
+        expect(f.invalid, 0);
+        expect(f.timedOut, 0);
+      },
+    );
+
+    test(
+      '[boundary] a mutant that hangs the test command is timedOut, not '
+      'detected — a hang is not the same evidence as an assertion actually '
+      'catching the wrong output, even though both make the process exit '
+      'non-zero-shaped',
+      () {
+        final FileMutationReport f = _reportFor(report, 'hangs.dart');
+        expect(f.timedOut, 1);
+        expect(f.detected, 0);
+        expect(f.undetected, 0);
+        expect(f.invalid, 0);
+        expect(f.total, 0, reason: 'timedOut is excluded from the score');
+      },
+    );
+
+    test(
+      '[partition] a hung mutant still gets its file restored — the kill '
+      'happens in _runOne\'s try block, and restore runs in its finally '
+      'regardless',
+      () {
+        expect(
+          File(p.join(dir.path, 'lib', 'hangs.dart')).readAsStringSync(),
+          contains('takeSafePath ? _safe() : _hang()'),
+        );
       },
     );
 

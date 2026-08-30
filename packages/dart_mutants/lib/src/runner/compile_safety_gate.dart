@@ -40,7 +40,11 @@ class CompileSafetyGate {
       <String>[...analyzeCommand.arguments, filePath],
       workingDirectory: analyzeCommand.workingDirectory,
     );
-    final int exitCode = await withTarget.run();
-    return _compilingExitCodes.contains(exitCode);
+    // No timeout is passed, so `run()` cannot actually return null here —
+    // static analysis over already-parsed source cannot hang. `exitCode` is
+    // still nullable at the type level because `run()` is shared with the
+    // test command, which does need one.
+    final int? exitCode = await withTarget.run();
+    return exitCode != null && _compilingExitCodes.contains(exitCode);
   }
 }

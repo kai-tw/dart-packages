@@ -28,29 +28,19 @@ Future<void> main(List<String> arguments) async {
       defaultsTo: 'dart analyze',
       help: 'The analyzer invocation used for the compile-safety gate.',
     )
+    ..addOption(
+      'mutant-timeout',
+      defaultsTo: '30',
+      help:
+          'Seconds a single mutant\'s test run gets before it is killed and '
+          'scored as a timeout instead of waited on forever. Applied to the '
+          'baseline check too.',
+    )
     ..addFlag('json', help: 'Emit the report as JSON instead of text.')
     ..addFlag('help', abbr: 'h', negatable: false);
 
-  final ArgResults args;
-  try {
-    args = parser.parse(arguments);
-  } on FormatException catch (e) {
-    stderr.writeln(e.message);
-    stderr.writeln(parser.usage);
-    exitCode = 64; // EX_USAGE
-    return;
-  }
-
-  if (args['help'] as bool) {
-    stdout.writeln(parser.usage);
-    return;
-  }
-
-  final List<String> filePaths = args.rest;
-  if (filePaths.isEmpty) {
-    stderr.writeln('no files given — nothing to mutate');
-    stderr.writeln(parser.usage);
-    exitCode = 64;
+  final ArgResults? args = _parseAndValidate(arguments, parser);
+  if (args == null) {
     return;
   }
 
@@ -59,10 +49,20 @@ Future<void> main(List<String> arguments) async {
     compileSafetyGate: CompileSafetyGate(
       _parseCommand(args['analyze-command'] as String),
     ),
+    // Already validated by _parseAndValidate — safe to parse again here
+    // rather than thread the number through as a second return value.
+    mutantTimeout: Duration(
+      seconds: int.parse(args['mutant-timeout'] as String),
+    ),
   );
 
-  final MutationRunReport report = await runner.run(filePaths);
+  final MutationRunReport report = await runner.run(args.rest);
 
+  // The report is always printed here, before exitCode is touched below —
+  // a non-zero exit (an aborted run, or any file with undetected mutants)
+  // must never suppress it. A caller scoring per-file at a threshold other
+  // than "zero undetected" depends on reading the JSON even when this
+  // process's own exit code disagrees with their verdict.
   if (args['json'] as bool) {
     stdout.writeln(const JsonEncoder.withIndent('  ').convert(report.toJson()));
   } else {
@@ -77,6 +77,44 @@ Future<void> main(List<String> arguments) async {
     (FileMutationReport f) => f.undetected > 0,
   );
   exitCode = anyUndetected ? 1 : 0;
+}
+
+/// Parses [arguments] against [parser] and validates them. Returns `null`
+/// if something was already wrong enough to handle right here — bad
+/// syntax, `--help`, no files, a malformed `--mutant-timeout` — having
+/// already printed whatever was needed and set [exitCode]; the caller
+/// should just return in that case.
+ArgResults? _parseAndValidate(List<String> arguments, ArgParser parser) {
+  final ArgResults args;
+  try {
+    args = parser.parse(arguments);
+  } on FormatException catch (e) {
+    stderr.writeln(e.message);
+    stderr.writeln(parser.usage);
+    exitCode = 64; // EX_USAGE
+    return null;
+  }
+
+  if (args['help'] as bool) {
+    stdout.writeln(parser.usage);
+    return null;
+  }
+
+  if (args.rest.isEmpty) {
+    stderr.writeln('no files given — nothing to mutate');
+    stderr.writeln(parser.usage);
+    exitCode = 64;
+    return null;
+  }
+
+  final int? timeoutSeconds = int.tryParse(args['mutant-timeout'] as String);
+  if (timeoutSeconds == null || timeoutSeconds <= 0) {
+    stderr.writeln('--mutant-timeout must be a positive number of seconds');
+    exitCode = 64;
+    return null;
+  }
+
+  return args;
 }
 
 ProcessCommand _parseCommand(String command) {
@@ -95,7 +133,7 @@ void _printText(MutationRunReport report) {
         : '${(f.detectionRate! * 100).toStringAsFixed(0)}%';
     stdout.writeln(
       '${f.filePath}: $rate (${f.detected}/${f.total} detected, '
-      '${f.invalid} invalid)',
+      '${f.invalid} invalid, ${f.timedOut} timed out)',
     );
     for (final MutantResult r in f.undetectedMutants) {
       stdout.writeln(
