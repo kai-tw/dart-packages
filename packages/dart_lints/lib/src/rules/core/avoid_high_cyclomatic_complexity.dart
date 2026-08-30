@@ -129,16 +129,26 @@ class _Visitor extends LintVisitor {
 
   @override
   void visitConstructorDeclaration(ConstructorDeclaration node) {
-    final String? ctorName = node.name?.lexeme;
-    final String typeName = node.typeName?.name ?? '';
-    final String label = ctorName == null ? typeName : '$typeName.$ctorName';
-    final int offset = node.name?.offset ?? node.typeName?.offset ?? node.offset;
-    _measure(node.body, "'$label'", offset);
+    final String label = _constructorLabel(node);
+    _measure(node.body, "'$label'", _constructorOffset(node));
     final String? outer = _enclosingLabel;
     _enclosingLabel = label;
     super.visitConstructorDeclaration(node);
     _enclosingLabel = outer;
   }
+
+  /// `C` for an unnamed constructor, `C.named` for a named one.
+  String _constructorLabel(ConstructorDeclaration node) {
+    final String? ctorName = node.name?.lexeme;
+    final String typeName = node.typeName?.name ?? '';
+    return ctorName == null ? typeName : '$typeName.$ctorName';
+  }
+
+  /// The constructor's own name token when present, else the enclosing
+  /// type's name — an unnamed constructor still has to anchor its report
+  /// somewhere.
+  int _constructorOffset(ConstructorDeclaration node) =>
+      node.name?.offset ?? node.typeName?.offset ?? node.offset;
 
   @override
   void visitFunctionExpression(FunctionExpression node) {

@@ -106,24 +106,50 @@ class _Visitor extends LintVisitor {
 
   @override
   void visitCompilationUnit(CompilationUnit node) {
-    if (_isExempt(node)) {
+    final List<ClassDeclaration>? classes = _publicClasses(node);
+    if (classes == null) {
       return;
     }
 
+    final String base = _baseName();
+    if (_handleFamilyFile(base, classes)) {
+      return;
+    }
+
+    final ClassDeclaration? primary = _findPrimary(base, classes);
+    if (primary == null) {
+      return;
+    }
+
+    _reportUnownedClasses(node, classes, primary, base);
+  }
+
+  List<ClassDeclaration>? _publicClasses(CompilationUnit node) {
+    if (_isExempt(node)) {
+      return null;
+    }
     final List<ClassDeclaration> classes = node.declarations
         .whereType<ClassDeclaration>()
         .where((ClassDeclaration c) => !c.name.lexeme.startsWith('_'))
         .toList();
     if (classes.isEmpty) {
-      return;
+      return null;
     }
+    return classes;
+  }
 
-    final String base = _baseName();
-    if (familyFileSuffixes.any(base.endsWith)) {
-      _checkFamily(classes);
-      return;
+  bool _handleFamilyFile(String base, List<ClassDeclaration> classes) {
+    if (!familyFileSuffixes.any(base.endsWith)) {
+      return false;
     }
+    _checkFamily(classes);
+    return true;
+  }
 
+  ClassDeclaration? _findPrimary(
+    String base,
+    List<ClassDeclaration> classes,
+  ) {
     final ClassDeclaration? primary = classes
         .where((ClassDeclaration c) => _snake(c.name.lexeme) == base)
         .firstOrNull;
@@ -138,9 +164,17 @@ class _Visitor extends LintVisitor {
             'be found from its own name is found by nobody.',
         offset: first.name.offset,
       );
-      return;
+      return null;
     }
+    return primary;
+  }
 
+  void _reportUnownedClasses(
+    CompilationUnit node,
+    List<ClassDeclaration> classes,
+    ClassDeclaration primary,
+    String base,
+  ) {
     // Every class declared here, private ones included: a descent chain may
     // pass through an intermediate the file does not export.
     final Map<String, ClassDeclaration> declaredHere =

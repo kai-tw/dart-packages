@@ -173,62 +173,69 @@ class DartLintsConfigLoader {
 
     final List<Area> areas = <Area>[];
     for (final MapEntry<Object?, Object?> entry in node.entries) {
-      final String name = entry.key.toString();
-      final Object? body = entry.value;
-      if (body is! YamlMap) {
-        throw DartLintsConfigException(
-          'area "$name" must be a map with a "paths:" key',
-          configPath: configPath,
-        );
-      }
-
-      final List<String> paths = _stringList(
-        body['paths'],
-        configPath,
-        'areas.$name.paths',
-      );
-      if (paths.isEmpty) {
-        throw DartLintsConfigException(
-          'area "$name" declares no paths',
-          configPath: configPath,
-        );
-      }
-
-      final Set<String> rules = <String>{...globalRules};
-      for (final String rule in _stringList(
-        body['enable'],
-        configPath,
-        'areas.$name.enable',
-      )) {
-        _assertKnownRule(rule, configPath, 'areas.$name.enable');
-        rules.add(rule);
-      }
-      for (final String rule in _stringList(
-        body['disable'],
-        configPath,
-        'areas.$name.disable',
-      )) {
-        _assertKnownRule(rule, configPath, 'areas.$name.disable');
-        rules.remove(rule);
-      }
-
       areas.add(
-        Area(
-          name: name,
-          pathGlobs: paths.map((String g) => Glob(g)).toList(),
-          enabledRules: rules,
-          optionOverrides: _options(body['options'], configPath),
-          analyzer: body['analyzer'] == null
-              ? null
-              : _analyzerSpec(
-                  body['analyzer'],
-                  configPath,
-                  'areas.$name.analyzer',
-                ),
-        ),
+        _area(entry.key.toString(), entry.value, globalRules, configPath),
       );
     }
     return areas;
+  }
+
+  Area _area(
+    String name,
+    Object? body,
+    Set<String> globalRules,
+    String configPath,
+  ) {
+    if (body is! YamlMap) {
+      throw DartLintsConfigException(
+        'area "$name" must be a map with a "paths:" key',
+        configPath: configPath,
+      );
+    }
+
+    final List<String> paths = _stringList(
+      body['paths'],
+      configPath,
+      'areas.$name.paths',
+    );
+    if (paths.isEmpty) {
+      throw DartLintsConfigException(
+        'area "$name" declares no paths',
+        configPath: configPath,
+      );
+    }
+
+    final Set<String> rules = <String>{...globalRules};
+    for (final String rule in _stringList(
+      body['enable'],
+      configPath,
+      'areas.$name.enable',
+    )) {
+      _assertKnownRule(rule, configPath, 'areas.$name.enable');
+      rules.add(rule);
+    }
+    for (final String rule in _stringList(
+      body['disable'],
+      configPath,
+      'areas.$name.disable',
+    )) {
+      _assertKnownRule(rule, configPath, 'areas.$name.disable');
+      rules.remove(rule);
+    }
+
+    return Area(
+      name: name,
+      pathGlobs: paths.map((String g) => Glob(g)).toList(),
+      enabledRules: rules,
+      optionOverrides: _options(body['options'], configPath),
+      analyzer: body['analyzer'] == null
+          ? null
+          : _analyzerSpec(
+              body['analyzer'],
+              configPath,
+              'areas.$name.analyzer',
+            ),
+    );
   }
 
   /// `avoid_layer_violation` needs the project's own package name to tell a
@@ -338,48 +345,66 @@ class DartLintsConfigLoader {
   Object _coerce(Object? value, OptionKind kind, String configPath, String at) {
     switch (kind) {
       case OptionKind.string:
-        if (value is String) {
-          return value;
-        }
-        throw DartLintsConfigException(
-          '"$at" must be a string, got ${_typeName(value)}',
-          configPath: configPath,
-        );
+        return _coerceString(value, configPath, at);
       case OptionKind.stringList:
-        if (value is YamlList &&
-            value.every((Object? item) => item is String)) {
-          return value.cast<String>().toList();
-        }
-        throw DartLintsConfigException(
-          '"$at" must be a list of strings, got ${_typeName(value)}',
-          configPath: configPath,
-        );
+        return _coerceStringList(value, configPath, at);
       case OptionKind.mapList:
-        if (value is YamlList &&
-            value.every((Object? item) => item is YamlMap)) {
-          return value
-              .cast<YamlMap>()
-              .map(
-                (YamlMap m) => m.map(
-                  (Object? k, Object? v) =>
-                      MapEntry<String, Object?>(k.toString(), v),
-                ),
-              )
-              .toList();
-        }
-        throw DartLintsConfigException(
-          '"$at" must be a list of maps, got ${_typeName(value)}',
-          configPath: configPath,
-        );
+        return _coerceMapList(value, configPath, at);
       case OptionKind.integer:
-        if (value is int) {
-          return value;
-        }
-        throw DartLintsConfigException(
-          '"$at" must be an integer, got ${_typeName(value)}',
-          configPath: configPath,
-        );
+        return _coerceInteger(value, configPath, at);
     }
+  }
+
+  String _coerceString(Object? value, String configPath, String at) {
+    if (value is String) {
+      return value;
+    }
+    throw DartLintsConfigException(
+      '"$at" must be a string, got ${_typeName(value)}',
+      configPath: configPath,
+    );
+  }
+
+  List<String> _coerceStringList(Object? value, String configPath, String at) {
+    if (value is YamlList && value.every((Object? item) => item is String)) {
+      return value.cast<String>().toList();
+    }
+    throw DartLintsConfigException(
+      '"$at" must be a list of strings, got ${_typeName(value)}',
+      configPath: configPath,
+    );
+  }
+
+  List<Map<String, Object?>> _coerceMapList(
+    Object? value,
+    String configPath,
+    String at,
+  ) {
+    if (value is YamlList && value.every((Object? item) => item is YamlMap)) {
+      return value
+          .cast<YamlMap>()
+          .map(
+            (YamlMap m) => m.map(
+              (Object? k, Object? v) =>
+                  MapEntry<String, Object?>(k.toString(), v),
+            ),
+          )
+          .toList();
+    }
+    throw DartLintsConfigException(
+      '"$at" must be a list of maps, got ${_typeName(value)}',
+      configPath: configPath,
+    );
+  }
+
+  int _coerceInteger(Object? value, String configPath, String at) {
+    if (value is int) {
+      return value;
+    }
+    throw DartLintsConfigException(
+      '"$at" must be an integer, got ${_typeName(value)}',
+      configPath: configPath,
+    );
   }
 
   AnalyzerSpec _analyzerSpec(Object? node, String configPath, String at) {

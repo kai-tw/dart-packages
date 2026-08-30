@@ -104,6 +104,32 @@ class _Visitor extends LintVisitor {
     );
   }
 
+  /// The (source, imported) layer pair to compare, or null when either side
+  /// of [importUri] does not resolve to one of the four recognised layers —
+  /// mirrors [_resolveImportPath]'s own null-when-inapplicable shape.
+  _LayerPair? _layersToCompare(String importUri) {
+    final String? resolvedImportPath = _resolveImportPath(importUri);
+    final String? sourceLayer = layout.layerOf(filePath);
+    final String? importLayer = resolvedImportPath == null
+        ? null
+        : layout.layerOf(resolvedImportPath);
+    if (sourceLayer == null || importLayer == null) {
+      return null;
+    }
+    return _LayerPair(sourceLayer: sourceLayer, importLayer: importLayer);
+  }
+
+  /// The Clean Architecture dependency rule this rule enforces — see the
+  /// class doc for the direction rules this switch encodes.
+  bool _isViolation(_LayerPair layers) =>
+      switch ((layers.sourceLayer, layers.importLayer)) {
+        ('domain', 'data') => true,
+        ('domain', 'presentation') => true,
+        ('presentation', 'data') => true,
+        ('data', 'presentation') => true,
+        _ => false,
+      };
+
   @override
   void visitImportDirective(ImportDirective node) {
     // A wiring container crosses every layer by design.
@@ -118,35 +144,30 @@ class _Visitor extends LintVisitor {
       return;
     }
 
-    final String? resolvedImportPath = _resolveImportPath(importUri);
-    final String? sourceLayer = layout.layerOf(filePath);
-    final String? importLayer = resolvedImportPath == null
-        ? null
-        : layout.layerOf(resolvedImportPath);
-
-    if (sourceLayer == null || importLayer == null) {
+    final _LayerPair? layers = _layersToCompare(importUri);
+    if (layers == null) {
       super.visitImportDirective(node);
       return;
     }
 
-    final bool isViolation = switch ((sourceLayer, importLayer)) {
-      ('domain', 'data') => true,
-      ('domain', 'presentation') => true,
-      ('presentation', 'data') => true,
-      ('data', 'presentation') => true,
-      _ => false,
-    };
-
-    if (isViolation) {
+    if (_isViolation(layers)) {
       report(
         ruleName: 'avoid_layer_violation',
         message:
-            'Layer violation: $sourceLayer/ must not import from '
-            '$importLayer/.',
+            'Layer violation: ${layers.sourceLayer}/ must not import from '
+            '${layers.importLayer}/.',
         offset: node.uri.offset,
       );
     }
 
     super.visitImportDirective(node);
   }
+}
+
+/// The (source, imported) layer pair a single import is checked against.
+class _LayerPair {
+  const _LayerPair({required this.sourceLayer, required this.importLayer});
+
+  final String sourceLayer;
+  final String importLayer;
 }

@@ -115,21 +115,28 @@ class _Visitor extends LintVisitor {
   bool _isAllowedContext(AstNode node) {
     AstNode? current = node.parent;
     while (current != null) {
-      if (current is ClassDeclaration && _isAllowedClass(current)) {
-        return true;
-      }
-      if (current is NamedExpression &&
-          current.name.label.name == 'create' &&
-          _isInBlocProviderCreation(current)) {
-        return true;
-      }
-      // BlocProvider.value takes a positional `value:` arg via the
-      // factory; sl resolution there is allowed by the rule too.
-      if (current is InstanceCreationExpression &&
-          _isBlocProviderValueCtor(current)) {
+      if (_isAllowedAncestor(current)) {
         return true;
       }
       current = current.parent;
+    }
+    return false;
+  }
+
+  bool _isAllowedAncestor(AstNode current) {
+    if (current is ClassDeclaration && _isAllowedClass(current)) {
+      return true;
+    }
+    if (current is NamedExpression &&
+        current.name.label.name == 'create' &&
+        _isInBlocProviderCreation(current)) {
+      return true;
+    }
+    // BlocProvider.value takes a positional `value:` arg via the
+    // factory; sl resolution there is allowed by the rule too.
+    if (current is InstanceCreationExpression &&
+        _isBlocProviderValueCtor(current)) {
+      return true;
     }
     return false;
   }

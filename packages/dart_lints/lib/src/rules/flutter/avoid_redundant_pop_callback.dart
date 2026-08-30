@@ -128,6 +128,22 @@ class _Visitor extends LintVisitor {
   }
 
   LintFix _buildFix(InstanceCreationExpression node, NamedExpression arg) {
+    final int removalEnd = _computeRemovalEnd(arg);
+    final List<SourceEdit> edits = <SourceEdit>[
+      SourceEdit(
+        offset: arg.offset,
+        length: removalEnd - arg.offset,
+        replacement: '',
+      ),
+    ];
+
+    _addConstEditIfOnlyArg(node, edits);
+
+    return LintFix(description: 'Remove redundant onPressed', edits: edits);
+  }
+
+  /// Returns the offset up to which source should be removed for [arg].
+  int _computeRemovalEnd(NamedExpression arg) {
     final Token endToken = arg.endToken;
     final Token? next = endToken.next;
     int removalEnd = arg.end;
@@ -139,19 +155,17 @@ class _Visitor extends LintVisitor {
         removalEnd++;
       }
     }
+    return removalEnd;
+  }
 
-    final List<SourceEdit> edits = <SourceEdit>[
-      SourceEdit(
-        offset: arg.offset,
-        length: removalEnd - arg.offset,
-        replacement: '',
-      ),
-    ];
-
-    // If onPressed was the *only* argument, the result is argless and
-    // can be const-constructed. Prepend `const ` (or replace an
-    // existing `new` keyword) so `prefer_const_constructors` doesn't
-    // immediately re-fire on the auto-fix output.
+  /// If onPressed was the *only* argument, the result is argless and can
+  /// be const-constructed. Prepend `const ` (or replace an existing `new`
+  /// keyword) so `prefer_const_constructors` doesn't immediately re-fire
+  /// on the auto-fix output.
+  void _addConstEditIfOnlyArg(
+    InstanceCreationExpression node,
+    List<SourceEdit> edits,
+  ) {
     final bool onlyArg = node.argumentList.arguments.length == 1;
     if (onlyArg && node.keyword == null) {
       edits.add(
@@ -167,7 +181,5 @@ class _Visitor extends LintVisitor {
         SourceEdit(offset: kw.offset, length: kw.length, replacement: 'const'),
       );
     }
-
-    return LintFix(description: 'Remove redundant onPressed', edits: edits);
   }
 }

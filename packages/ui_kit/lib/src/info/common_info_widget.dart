@@ -68,23 +68,6 @@ class CommonInfoWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colorScheme = Theme.of(context).colorScheme;
-    final TextTheme textTheme = Theme.of(context).textTheme;
-    final Color resolvedIconColor = iconColor ?? colorScheme.onSurfaceVariant;
-    final List<Widget>? resolvedActions = actions;
-
-    final double iconSize = dense ? 20.0 : 48.0;
-    final double iconGap = dense ? 4.0 : 16.0;
-    final double captionGap = dense ? 2.0 : 8.0;
-    final double actionsGap = dense ? 12.0 : 24.0;
-    final TextStyle? titleStyle = dense
-        ? textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant)
-        : textTheme.titleMedium;
-    final TextStyle? captionStyle =
-        (dense ? textTheme.bodySmall : textTheme.bodyMedium)?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-        );
-
     // The cap sits INSIDE the Center, not around it. A Scaffold body is laid
     // out under tight constraints and `BoxConstraints.enforce` clamps an
     // additional maximum back up to the incoming minimum, so a bare
@@ -101,23 +84,11 @@ class CommonInfoWidget extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(iconData, size: iconSize, color: resolvedIconColor),
-            SizedBox(height: iconGap),
-            Text(title, style: titleStyle, textAlign: TextAlign.center),
-            if (caption != null) ...<Widget>[
-              SizedBox(height: captionGap),
-              Text(caption!, style: captionStyle, textAlign: TextAlign.center),
-            ],
-            if (resolvedActions != null &&
-                resolvedActions.isNotEmpty) ...<Widget>[
-              SizedBox(height: actionsGap),
-              Wrap(
-                spacing: 8.0,
-                runSpacing: 8.0,
-                alignment: WrapAlignment.center,
-                children: resolvedActions,
-              ),
-            ],
+            _buildIcon(context),
+            SizedBox(height: dense ? 4.0 : 16.0),
+            _buildTitle(context),
+            ..._buildCaption(context),
+            ..._buildActions(context),
           ],
         ),
       ),
@@ -139,5 +110,52 @@ class CommonInfoWidget extends StatelessWidget {
         child: centered,
       ),
     );
+  }
+
+  Widget _buildIcon(BuildContext context) {
+    final Color resolvedIconColor =
+        iconColor ?? Theme.of(context).colorScheme.onSurfaceVariant;
+    return Icon(iconData, size: dense ? 20.0 : 48.0, color: resolvedIconColor);
+  }
+
+  Widget _buildTitle(BuildContext context) {
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    final TextStyle? titleStyle = dense
+        ? textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant)
+        : textTheme.titleMedium;
+    return Text(title, style: titleStyle, textAlign: TextAlign.center);
+  }
+
+  List<Widget> _buildCaption(BuildContext context) {
+    if (caption != null) {
+      final TextTheme textTheme = Theme.of(context).textTheme;
+      final ColorScheme colorScheme = Theme.of(context).colorScheme;
+      final TextStyle? captionStyle =
+          (dense ? textTheme.bodySmall : textTheme.bodyMedium)?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          );
+      return <Widget>[
+        SizedBox(height: dense ? 2.0 : 8.0),
+        Text(caption!, style: captionStyle, textAlign: TextAlign.center),
+      ];
+    }
+    return const <Widget>[];
+  }
+
+  List<Widget> _buildActions(BuildContext context) {
+    final List<Widget>? resolvedActions = actions;
+    if (resolvedActions != null && resolvedActions.isNotEmpty) {
+      return <Widget>[
+        SizedBox(height: dense ? 12.0 : 24.0),
+        Wrap(
+          spacing: 8.0,
+          runSpacing: 8.0,
+          alignment: WrapAlignment.center,
+          children: resolvedActions,
+        ),
+      ];
+    }
+    return const <Widget>[];
   }
 }

@@ -80,40 +80,17 @@ class HlcClockImpl implements HlcClock {
 
   @override
   Hlc receive(Hlc remote) {
-    // Compute the all-max physical across (wallNow, last, remote) —
-    // per Turukin §"Implementation".
     final int wallNow = _clock.now().millisecondsSinceEpoch;
     final Hlc? last = _lastEmitted;
     final int lastPhysical = last?.physicalMs ?? 0;
-    int newPhysical = wallNow;
-    if (lastPhysical > newPhysical) {
-      newPhysical = lastPhysical;
-    }
-    if (remote.physicalMs > newPhysical) {
-      newPhysical = remote.physicalMs;
-    }
-
-    // Logical: depends on which physical "won" the max — bump the
-    // winning side's logical by 1; if all three agree, bump max
-    // (last.logical, remote.logical) by 1; if wall won, reset to 0.
     final int lastLogical = last?.logical ?? 0;
-    final int newLogical;
-    if (newPhysical == lastPhysical && newPhysical == remote.physicalMs) {
-      // Last and remote tie at the winning physical — bump max logical.
-      final int higher = lastLogical > remote.logical
-          ? lastLogical
-          : remote.logical;
-      newLogical = higher + 1;
-    } else if (newPhysical == lastPhysical) {
-      // Last won — bump its logical.
-      newLogical = lastLogical + 1;
-    } else if (newPhysical == remote.physicalMs) {
-      // Remote won — adopt its logical and bump.
-      newLogical = remote.logical + 1;
-    } else {
-      // Wall won — fresh logical run.
-      newLogical = 0;
-    }
+    final int newPhysical = _mergePhysical(wallNow, lastPhysical, remote);
+    final int newLogical = _mergeLogical(
+      lastPhysical,
+      lastLogical,
+      remote,
+      newPhysical,
+    );
 
     // Stamp + persist.
     final Hlc next = Hlc(
@@ -123,5 +100,46 @@ class HlcClockImpl implements HlcClock {
     );
     _lastEmitted = next;
     return next;
+  }
+
+  /// The all-max physical across (wallNow, last, remote) — per Turukin
+  /// §"Implementation".
+  int _mergePhysical(int wallNow, int lastPhysical, Hlc remote) {
+    int newPhysical = wallNow;
+    if (lastPhysical > newPhysical) {
+      newPhysical = lastPhysical;
+    }
+    if (remote.physicalMs > newPhysical) {
+      newPhysical = remote.physicalMs;
+    }
+    return newPhysical;
+  }
+
+  /// The logical counter for whichever of (last, remote) shares the
+  /// winning physical — bumps the winner's logical by 1; if last and
+  /// remote tie, bumps max(last.logical, remote.logical) by 1; if wall
+  /// won outright, resets to 0.
+  int _mergeLogical(
+    int lastPhysical,
+    int lastLogical,
+    Hlc remote,
+    int newPhysical,
+  ) {
+    if (newPhysical == lastPhysical && newPhysical == remote.physicalMs) {
+      // Last and remote tie at the winning physical — bump max logical.
+      final int higher = lastLogical > remote.logical
+          ? lastLogical
+          : remote.logical;
+      return higher + 1;
+    } else if (newPhysical == lastPhysical) {
+      // Last won — bump its logical.
+      return lastLogical + 1;
+    } else if (newPhysical == remote.physicalMs) {
+      // Remote won — adopt its logical and bump.
+      return remote.logical + 1;
+    } else {
+      // Wall won — fresh logical run.
+      return 0;
+    }
   }
 }

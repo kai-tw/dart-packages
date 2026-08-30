@@ -59,6 +59,33 @@ abstract final class LogErrorRedactor {
     final String type = error.runtimeType.toString();
 
     // Host describer first, so an app can also override a built-in arm.
+    final _RedactedError? describerResult = _redactViaDescriber(error, type);
+    if (describerResult != null) {
+      return describerResult;
+    }
+
+    if (error is PlatformException) {
+      return _redactPlatformException(error, type);
+    }
+    if (error is FileSystemException) {
+      return _redactFileSystemException(error, type);
+    }
+    if (error is SocketException) {
+      return _redactSocketException(error, type);
+    }
+    if (error is OSError) {
+      return _redactOSError(error, type);
+    }
+    if (error is LoggableException) {
+      return _redactLoggableException(error, type);
+    }
+
+    return _RedactedError(type);
+  }
+
+  /// Applies the host-supplied [describeExtra], if set. Returns null to fall
+  /// through to the built-in arms.
+  static _RedactedError? _redactViaDescriber(Object error, String type) {
     final String? Function(Object)? describer = describeExtra;
     if (describer != null) {
       final String? extra = describer(error);
@@ -71,45 +98,60 @@ abstract final class LogErrorRedactor {
         );
       }
     }
+    return null;
+  }
 
-    if (error is PlatformException) {
-      // `code` is a stable channel/plugin error code ('channel-error') and
-      // separates platform failure modes; message/details are free-form and
-      // dropped. Unlike the other allow-listed fields it is a plugin-set
-      // String with no type guarantee, so it is forwarded only when it has the
-      // shape of an opaque token — a plugin smuggling a path or a sentence
-      // into it degrades to type-name-only.
-      final String code = error.code;
-      return _RedactedError(_looksFreeForm(code) ? type : '$type code=$code');
-    }
-    if (error is FileSystemException) {
-      // errno separates ENOSPC / EACCES / ENOENT. path/message are PII.
-      return _RedactedError('$type errno=${error.osError?.errorCode ?? '-'}');
-    }
-    if (error is SocketException) {
-      // errno separates connection-refused / host-unreachable. address dropped.
-      return _RedactedError('$type errno=${error.osError?.errorCode ?? '-'}');
-    }
-    if (error is OSError) {
-      // errno is the discriminator; the OS message string is dropped.
-      return _RedactedError('$type errno=${error.errorCode}');
-    }
-    if (error is LoggableException) {
-      // An app exception that opted in by extending the template. Its code is
-      // an `int` by construction, so it cannot carry text at all; the band
-      // clamp is for the implementer who puts a timestamp or a row count
-      // there, which degrades to type-name-only rather than widening the
-      // egress.
-      final int? code = error.diagnosticCode;
-      if (code == null) {
-        return _RedactedError('$type code=-');
-      }
-      return _RedactedError(
-        (code < 0 || code > 65535) ? type : '$type code=$code',
-      );
-    }
+  static _RedactedError _redactPlatformException(
+    PlatformException error,
+    String type,
+  ) {
+    // `code` is a stable channel/plugin error code ('channel-error') and
+    // separates platform failure modes; message/details are free-form and
+    // dropped. Unlike the other allow-listed fields it is a plugin-set
+    // String with no type guarantee, so it is forwarded only when it has the
+    // shape of an opaque token — a plugin smuggling a path or a sentence
+    // into it degrades to type-name-only.
+    final String code = error.code;
+    return _RedactedError(_looksFreeForm(code) ? type : '$type code=$code');
+  }
 
-    return _RedactedError(type);
+  static _RedactedError _redactFileSystemException(
+    FileSystemException error,
+    String type,
+  ) {
+    // errno separates ENOSPC / EACCES / ENOENT. path/message are PII.
+    return _RedactedError('$type errno=${error.osError?.errorCode ?? '-'}');
+  }
+
+  static _RedactedError _redactSocketException(
+    SocketException error,
+    String type,
+  ) {
+    // errno separates connection-refused / host-unreachable. address dropped.
+    return _RedactedError('$type errno=${error.osError?.errorCode ?? '-'}');
+  }
+
+  static _RedactedError _redactOSError(OSError error, String type) {
+    // errno is the discriminator; the OS message string is dropped.
+    return _RedactedError('$type errno=${error.errorCode}');
+  }
+
+  static _RedactedError _redactLoggableException(
+    LoggableException error,
+    String type,
+  ) {
+    // An app exception that opted in by extending the template. Its code is
+    // an `int` by construction, so it cannot carry text at all; the band
+    // clamp is for the implementer who puts a timestamp or a row count
+    // there, which degrades to type-name-only rather than widening the
+    // egress.
+    final int? code = error.diagnosticCode;
+    if (code == null) {
+      return _RedactedError('$type code=-');
+    }
+    return _RedactedError(
+      (code < 0 || code > 65535) ? type : '$type code=$code',
+    );
   }
 
   /// Whether [value] is shaped like embedded free-form data rather than an

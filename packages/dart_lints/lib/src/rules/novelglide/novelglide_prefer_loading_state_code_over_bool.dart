@@ -77,7 +77,11 @@ class _Visitor extends ResolvedLintVisitor {
       return;
     }
 
-    // Scan: flag any loading-lifecycle bool field.
+    _reportLoadingFields(node, name);
+  }
+
+  // Scan: flag any loading-lifecycle bool field.
+  void _reportLoadingFields(ClassDeclaration node, String name) {
     for (final ClassMember member in node.members) {
       if (member is! FieldDeclaration) {
         continue;

@@ -129,21 +129,24 @@ class _Visitor extends ResolvedLintVisitor {
         continue;
       }
 
-      // Report any unguarded emit calls.
-      final List<MethodInvocation> emits = _findEmitCalls(statement);
-      for (final MethodInvocation emit in emits) {
-        if (_isEmitGuardedByIsClosed(emit)) {
-          continue;
-        }
-        report(
-          ruleName: 'avoid_emit_after_await',
-          message:
-              'emit() called after await without '
-              'isClosed guard. The Cubit may already '
-              'be closed.',
-          offset: emit.methodName.offset,
-        );
+      _reportUnguardedEmits(statement);
+    }
+  }
+
+  void _reportUnguardedEmits(Statement statement) {
+    final List<MethodInvocation> emits = _findEmitCalls(statement);
+    for (final MethodInvocation emit in emits) {
+      if (_isEmitGuardedByIsClosed(emit)) {
+        continue;
       }
+      report(
+        ruleName: 'avoid_emit_after_await',
+        message:
+            'emit() called after await without '
+            'isClosed guard. The Cubit may already '
+            'be closed.',
+        offset: emit.methodName.offset,
+      );
     }
   }
 

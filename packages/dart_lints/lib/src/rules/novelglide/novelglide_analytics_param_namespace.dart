@@ -133,8 +133,18 @@ class NovelglideAnalyticsParamNamespace extends ProjectLintRule {
       }
     }
 
-    // Cross-family reuse: one key claimed by events whose names belong to
-    // different families is the `source` failure, and it is only visible here.
+    violations.addAll(_crossFamilyViolations(familiesByKey, firstSiteByKey));
+
+    return violations;
+  }
+
+  /// Cross-family reuse: one key claimed by events whose names belong to
+  /// different families is the `source` failure, and it is only visible here.
+  List<LintViolation> _crossFamilyViolations(
+    Map<String, Set<String>> familiesByKey,
+    Map<String, _Site> firstSiteByKey,
+  ) {
+    final List<LintViolation> violations = <LintViolation>[];
     for (final MapEntry<String, Set<String>> entry in familiesByKey.entries) {
       if (entry.value.length < 2 || _sharedKeys.contains(entry.key)) {
         continue;
@@ -154,7 +164,6 @@ class NovelglideAnalyticsParamNamespace extends ProjectLintRule {
         ),
       );
     }
-
     return violations;
   }
 
@@ -255,16 +264,25 @@ class _ParamVisitor extends RecursiveAstVisitor<void> {
       if (annotation.name.name != 'JsonKey') {
         continue;
       }
-      for (final Expression argument
-          in annotation.arguments?.arguments ?? const <Expression>[]) {
-        if (argument is! NamedExpression ||
-            argument.name.label.name != 'name') {
-          continue;
-        }
-        final Expression value = argument.expression;
-        if (value is SimpleStringLiteral) {
-          return value.value;
-        }
+      final String? name = _nameArgument(annotation);
+      if (name != null) {
+        return name;
+      }
+    }
+    return null;
+  }
+
+  /// The `name:` argument's value from one `@JsonKey(...)` annotation, or
+  /// `null` when it has none, or the value isn't a plain string literal.
+  static String? _nameArgument(Annotation annotation) {
+    for (final Expression argument
+        in annotation.arguments?.arguments ?? const <Expression>[]) {
+      if (argument is! NamedExpression || argument.name.label.name != 'name') {
+        continue;
+      }
+      final Expression value = argument.expression;
+      if (value is SimpleStringLiteral) {
+        return value.value;
       }
     }
     return null;

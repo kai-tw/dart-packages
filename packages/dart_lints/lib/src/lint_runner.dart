@@ -49,17 +49,12 @@ class LintRunner {
         ? paths.map((String path) => p.normalize(p.absolute(path))).toList()
         : <String>[config.rootDirectory];
 
-    // The stock analyzer gets the areas' own roots, not the repository root.
-    // Handing it the root would walk everything the areas deliberately leave
-    // out — a Flutter project's `build/` alone is hundreds of generated files,
-    // and reporting them says nothing about the code anyone wrote. An explicit
-    // path on the command line still wins, and `analyzer.paths` overrides both.
-    final int analyzerIssues = skipAnalyze
-        ? 0
-        : analyzer.run(
-            config.analyzer,
-            paths.isNotEmpty ? scanRoots : _areaRoots(areas),
-          );
+    final int analyzerIssues = _runStockAnalyzer(
+      skipAnalyze: skipAnalyze,
+      paths: paths,
+      scanRoots: scanRoots,
+      areas: areas,
+    );
 
     final List<LintViolation> violations = <LintViolation>[];
     final List<String> unresolved = <String>[];
@@ -73,42 +68,20 @@ class LintRunner {
 
     for (final AnalysisContext context in collection.contexts) {
       for (final String absolutePath in context.contextRoot.analyzedFiles()) {
-        if (!absolutePath.endsWith('.dart')) {
+        final _FileTarget? target = _targetFor(absolutePath, areas);
+        if (target == null) {
           continue;
         }
 
-        final String relativePath = resolver.relativize(absolutePath);
-        if (_isExcluded(relativePath)) {
-          continue;
-        }
-
-        final Area? area = resolver.resolve(absolutePath);
-        if (area == null || !areas.contains(area)) {
-          continue;
-        }
-
-        final _FileOutcome outcome = await _analyzeFile(
+        fixedCount += await _processFile(
           context: context,
           absolutePath: absolutePath,
-          relativePath: relativePath,
-          area: area,
+          target: target,
+          fix: fix,
+          violations: violations,
+          unresolved: unresolved,
           projectUnits: projectUnits,
         );
-
-        if (outcome.unresolved) {
-          unresolved.add(relativePath);
-          continue;
-        }
-
-        violations.addAll(outcome.violations);
-
-        if (fix && outcome.source != null) {
-          fixedCount += _applyFixes(
-            absolutePath,
-            outcome.source!,
-            outcome.violations,
-          );
-        }
       }
     }
 
@@ -135,6 +108,78 @@ class LintRunner {
       fixedCount: fixedCount,
       analyzerIssues: analyzerIssues,
     );
+  }
+
+  /// The stock analyzer gets the areas' own roots, not the repository root.
+  /// Handing it the root would walk everything the areas deliberately leave
+  /// out — a Flutter project's `build/` alone is hundreds of generated files,
+  /// and reporting them says nothing about the code anyone wrote. An explicit
+  /// path on the command line still wins, and `analyzer.paths` overrides both.
+  int _runStockAnalyzer({
+    required bool skipAnalyze,
+    required List<String> paths,
+    required List<String> scanRoots,
+    required List<Area> areas,
+  }) => skipAnalyze
+      ? 0
+      : analyzer.run(
+          config.analyzer,
+          paths.isNotEmpty ? scanRoots : _areaRoots(areas),
+        );
+
+  /// The area [absolutePath] belongs to, and its path relative to that area —
+  /// or `null` if the file is out of scope for this run: not Dart, excluded,
+  /// or outside every area in [areas].
+  _FileTarget? _targetFor(String absolutePath, List<Area> areas) {
+    if (!absolutePath.endsWith('.dart')) {
+      return null;
+    }
+
+    final String relativePath = resolver.relativize(absolutePath);
+    if (_isExcluded(relativePath)) {
+      return null;
+    }
+
+    final Area? area = resolver.resolve(absolutePath);
+    if (area == null || !areas.contains(area)) {
+      return null;
+    }
+
+    return _FileTarget(relativePath: relativePath, area: area);
+  }
+
+  /// Runs [target] through its area's rules, folding the outcome into
+  /// [violations] and [unresolved] and applying fixes when [fix] is set.
+  /// Returns the number of violations fixed.
+  Future<int> _processFile({
+    required AnalysisContext context,
+    required String absolutePath,
+    required _FileTarget target,
+    required bool fix,
+    required List<LintViolation> violations,
+    required List<String> unresolved,
+    required Map<ProjectLintRule, List<ProjectUnit>> projectUnits,
+  }) async {
+    final _FileOutcome outcome = await _analyzeFile(
+      context: context,
+      absolutePath: absolutePath,
+      relativePath: target.relativePath,
+      area: target.area,
+      projectUnits: projectUnits,
+    );
+
+    if (outcome.unresolved) {
+      unresolved.add(target.relativePath);
+      return 0;
+    }
+
+    violations.addAll(outcome.violations);
+
+    if (fix && outcome.source != null) {
+      return _applyFixes(absolutePath, outcome.source!, outcome.violations);
+    }
+
+    return 0;
   }
 
   Future<_FileOutcome> _analyzeFile({
@@ -261,6 +306,13 @@ class LintRunner {
 
   bool _isExcluded(String relativePath) =>
       config.excludeGlobs.any((Glob glob) => glob.matches(relativePath));
+}
+
+class _FileTarget {
+  const _FileTarget({required this.relativePath, required this.area});
+
+  final String relativePath;
+  final Area area;
 }
 
 class _FileOutcome {

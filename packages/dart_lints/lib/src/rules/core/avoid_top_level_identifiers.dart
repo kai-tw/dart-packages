@@ -181,39 +181,43 @@ class _Visitor extends LintVisitor {
     }
 
     for (final CompilationUnitMember member in node.declarations) {
-      if (_isFrameworkDeclaration(member)) {
-        continue;
-      }
-      if (member is TopLevelVariableDeclaration) {
-        for (final VariableDeclaration v in member.variables.variables) {
-          report(
-            ruleName: 'avoid_top_level_identifiers',
-            message:
-                'Top-level ${member.variables.isConst ? 'const' : 'variable'} '
-                "'${v.name.lexeme}' has no owner. Give it one: a static "
-                'field on the type it relates to, or an enum member for a '
-                'closed set.',
-            offset: v.name.offset,
-          );
-        }
-      } else if (member is FunctionDeclaration) {
-        // `main` is the language's entry point and must be a top-level
-        // function, wherever the file sits — an app's `lib/main.dart`, a
-        // script in `bin/`, every test file. Reporting it would be advice the
-        // author cannot take, so it is exempted by what it IS rather than by
-        // the filename that usually holds it.
-        if (member.name.lexeme == 'main') {
-          continue;
-        }
+      _reportMember(member);
+    }
+  }
+
+  void _reportMember(CompilationUnitMember member) {
+    if (_isFrameworkDeclaration(member)) {
+      return;
+    }
+    if (member is TopLevelVariableDeclaration) {
+      for (final VariableDeclaration v in member.variables.variables) {
         report(
           ruleName: 'avoid_top_level_identifiers',
           message:
-              "Top-level function '${member.name.lexeme}' has no owner. "
-              'Give it one: an extension method, or a method on the type '
-              'it operates on.',
-          offset: member.name.offset,
+              'Top-level ${member.variables.isConst ? 'const' : 'variable'} '
+              "'${v.name.lexeme}' has no owner. Give it one: a static "
+              'field on the type it relates to, or an enum member for a '
+              'closed set.',
+          offset: v.name.offset,
         );
       }
+    } else if (member is FunctionDeclaration) {
+      // `main` is the language's entry point and must be a top-level
+      // function, wherever the file sits — an app's `lib/main.dart`, a
+      // script in `bin/`, every test file. Reporting it would be advice the
+      // author cannot take, so it is exempted by what it IS rather than by
+      // the filename that usually holds it.
+      if (member.name.lexeme == 'main') {
+        return;
+      }
+      report(
+        ruleName: 'avoid_top_level_identifiers',
+        message:
+            "Top-level function '${member.name.lexeme}' has no owner. "
+            'Give it one: an extension method, or a method on the type '
+            'it operates on.',
+        offset: member.name.offset,
+      );
     }
   }
 }

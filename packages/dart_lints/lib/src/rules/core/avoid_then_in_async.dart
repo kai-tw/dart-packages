@@ -81,21 +81,33 @@ class _Visitor extends LintVisitor {
   bool _isInsideFutureWait(MethodInvocation node) {
     AstNode? current = node.parent;
     while (current != null) {
-      if (current is ListLiteral && current.parent is ArgumentList) {
-        final AstNode? call = current.parent?.parent;
-        if (call is MethodInvocation &&
-            call.methodName.name == 'wait' &&
-            call.target is SimpleIdentifier &&
-            (call.target as SimpleIdentifier).name == 'Future') {
-          return true;
-        }
+      if (current is ListLiteral && _isFutureWaitArgument(current)) {
+        return true;
       }
-      // Don't walk past function boundaries.
-      if (current is FunctionExpression || current is MethodDeclaration) {
+      if (_isFunctionBoundary(current)) {
         break;
       }
       current = current.parent;
     }
     return false;
   }
+
+  /// Returns true if [list] is the argument list of a `Future.wait([ ... ])`
+  /// call.
+  bool _isFutureWaitArgument(ListLiteral list) {
+    if (list.parent is ArgumentList) {
+      final AstNode? call = list.parent?.parent;
+      if (call is MethodInvocation &&
+          call.methodName.name == 'wait' &&
+          call.target is SimpleIdentifier &&
+          (call.target as SimpleIdentifier).name == 'Future') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Whether [node] is a function boundary the upward walk shouldn't cross.
+  bool _isFunctionBoundary(AstNode node) =>
+      node is FunctionExpression || node is MethodDeclaration;
 }

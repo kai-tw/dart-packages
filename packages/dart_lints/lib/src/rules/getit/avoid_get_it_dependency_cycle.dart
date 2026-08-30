@@ -228,6 +228,46 @@ List<List<String>> _findCycles(Map<String, Set<String>> graph) {
   final List<List<String>> sccs = <List<String>>[];
   int counter = 0;
 
+  void initializeNode(_Frame frame) {
+    final String v = frame.node;
+    index[v] = counter;
+    lowLink[v] = counter;
+    counter++;
+    stack.add(v);
+    onStack.add(v);
+    frame.neighbors = (graph[v] ?? const <String>{}).toList();
+  }
+
+  // Folds each already-indexed neighbor into v's lowlink; returns the first
+  // unvisited one to recurse into, or null once none remain.
+  _Frame? nextChildFrame(_Frame frame) {
+    final String v = frame.node;
+    while (frame.cursor < frame.neighbors!.length) {
+      final String w = frame.neighbors![frame.cursor++];
+      if (!index.containsKey(w)) {
+        return _Frame(w);
+      } else if (onStack.contains(w)) {
+        lowLink[v] = lowLink[v]! < index[w]! ? lowLink[v]! : index[w]!;
+      }
+    }
+    return null;
+  }
+
+  void popComponent(String v) {
+    final List<String> component = <String>[];
+    String w;
+    do {
+      w = stack.removeLast();
+      onStack.remove(w);
+      component.add(w);
+    } while (w != v);
+    final bool selfLoop =
+        component.length == 1 && (graph[v]?.contains(v) ?? false);
+    if (component.length > 1 || selfLoop) {
+      sccs.add(component);
+    }
+  }
+
   // Iterative Tarjan — the DI graph is shallow, but recursion-free keeps it
   // safe regardless of dependency-chain depth.
   void strongConnect(String root) {
@@ -237,42 +277,17 @@ List<List<String>> _findCycles(Map<String, Set<String>> graph) {
       final String v = frame.node;
 
       if (frame.neighbors == null) {
-        index[v] = counter;
-        lowLink[v] = counter;
-        counter++;
-        stack.add(v);
-        onStack.add(v);
-        frame.neighbors = (graph[v] ?? const <String>{}).toList();
+        initializeNode(frame);
       }
 
-      bool recursed = false;
-      while (frame.cursor < frame.neighbors!.length) {
-        final String w = frame.neighbors![frame.cursor++];
-        if (!index.containsKey(w)) {
-          frames.add(_Frame(w));
-          recursed = true;
-          break;
-        } else if (onStack.contains(w)) {
-          lowLink[v] = lowLink[v]! < index[w]! ? lowLink[v]! : index[w]!;
-        }
-      }
-      if (recursed) {
+      final _Frame? child = nextChildFrame(frame);
+      if (child != null) {
+        frames.add(child);
         continue;
       }
 
       if (lowLink[v] == index[v]) {
-        final List<String> component = <String>[];
-        String w;
-        do {
-          w = stack.removeLast();
-          onStack.remove(w);
-          component.add(w);
-        } while (w != v);
-        final bool selfLoop =
-            component.length == 1 && (graph[v]?.contains(v) ?? false);
-        if (component.length > 1 || selfLoop) {
-          sccs.add(component);
-        }
+        popComponent(v);
       }
 
       frames.removeLast();

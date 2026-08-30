@@ -121,20 +121,7 @@ class _Visitor extends ResolvedLintVisitor {
     // provably non-identifying primitive or enum.
     if (message is StringInterpolation) {
       for (final InterpolationElement element in message.elements) {
-        if (element is InterpolationExpression) {
-          final DartType? type = element.expression.staticType;
-          if (type == null || !_isNonIdentifying(type)) {
-            report(
-              ruleName: 'avoid_unsafe_log_interpolation',
-              message:
-                  'Interpolating a non-primitive value into a breadcrumb '
-                  'log message can leak PII to release Crashlytics '
-                  '(CWE-532). Move it to the error: argument, or interpolate '
-                  'only num/bool/enum.',
-              offset: element.offset,
-            );
-          }
-        }
+        _checkInterpolationElement(element);
       }
       return;
     }
@@ -149,6 +136,23 @@ class _Visitor extends ResolvedLintVisitor {
           'constructed message can leak PII to release Crashlytics (CWE-532).',
       offset: message.offset,
     );
+  }
+
+  void _checkInterpolationElement(InterpolationElement element) {
+    if (element is InterpolationExpression) {
+      final DartType? type = element.expression.staticType;
+      if (type == null || !_isNonIdentifying(type)) {
+        report(
+          ruleName: 'avoid_unsafe_log_interpolation',
+          message:
+              'Interpolating a non-primitive value into a breadcrumb '
+              'log message can leak PII to release Crashlytics '
+              '(CWE-532). Move it to the error: argument, or interpolate '
+              'only num/bool/enum.',
+          offset: element.offset,
+        );
+      }
+    }
   }
 
   /// Whether [type] is a value that cannot carry user-derived data — an

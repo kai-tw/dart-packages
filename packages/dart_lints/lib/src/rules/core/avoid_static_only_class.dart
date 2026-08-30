@@ -146,10 +146,43 @@ class _Visitor extends LintVisitor {
       return;
     }
 
+    final _MemberSummary members = _summarizeMembers(node.members);
+
+    // A bare `abstract` class with no constructor is already uninstantiable
+    // by the language itself — Effective Dart's own recommended shape for a
+    // namespace, and there is no redundant workaround left to flag. One that
+    // ALSO declares a constructor still reports: the constructor is doing
+    // nothing there, which is the tell that the class was never a unit.
+    final bool isUnclosableWithoutWorkaround =
+        node.abstractKeyword != null && !members.hasConstructor;
+
+    if (members.hasMember &&
+        members.allStatic &&
+        !isUnclosableWithoutWorkaround &&
+        !_participatesInHierarchy(node)) {
+      report(
+        ruleName: 'avoid_static_only_class',
+        message:
+            "'${node.name.lexeme}' has no member that is not static. Move "
+            'each member onto the type it describes, or fold a closed set '
+            'into an enum — a private constructor does not turn a '
+            'namespace into a unit.',
+        offset: node.name.offset,
+      );
+    }
+
+    super.visitClassDeclaration(node);
+  }
+
+  /// Whether [members] contains at least one member that is not a
+  /// constructor ([hasMember]), at least one constructor ([hasConstructor]),
+  /// and every non-constructor member is `static` ([allStatic]) — the three
+  /// facts the antipattern check needs from a class's member list.
+  _MemberSummary _summarizeMembers(List<ClassMember> members) {
     bool hasMember = false;
     bool hasConstructor = false;
     bool allStatic = true;
-    for (final ClassMember member in node.members) {
+    for (final ClassMember member in members) {
       if (member is ConstructorDeclaration) {
         hasConstructor = true;
         continue;
@@ -165,40 +198,35 @@ class _Visitor extends LintVisitor {
         break;
       }
     }
-
-    // A bare `abstract` class with no constructor is already uninstantiable
-    // by the language itself — Effective Dart's own recommended shape for a
-    // namespace, and there is no redundant workaround left to flag. One that
-    // ALSO declares a constructor still reports: the constructor is doing
-    // nothing there, which is the tell that the class was never a unit.
-    final bool isUnclosableWithoutWorkaround =
-        node.abstractKeyword != null && !hasConstructor;
-
-    // A class wired into a type hierarchy is not a filing cabinet. `extends`
-    // and `with` carry instance members this syntactic visitor cannot see
-    // (freezed's `with _$X` is the common case); being extended by something
-    // in this file makes it a base, whose constructor serves `super()` calls
-    // rather than blocking instantiation.
-    final bool participatesInHierarchy =
-        node.extendsClause != null ||
-        node.withClause != null ||
-        _extendedInUnit.contains(node.name.lexeme);
-
-    if (hasMember &&
-        allStatic &&
-        !isUnclosableWithoutWorkaround &&
-        !participatesInHierarchy) {
-      report(
-        ruleName: 'avoid_static_only_class',
-        message:
-            "'${node.name.lexeme}' has no member that is not static. Move "
-            'each member onto the type it describes, or fold a closed set '
-            'into an enum — a private constructor does not turn a '
-            'namespace into a unit.',
-        offset: node.name.offset,
-      );
-    }
-
-    super.visitClassDeclaration(node);
+    return _MemberSummary(
+      hasMember: hasMember,
+      hasConstructor: hasConstructor,
+      allStatic: allStatic,
+    );
   }
+
+  /// A class wired into a type hierarchy is not a filing cabinet. `extends`
+  /// and `with` carry instance members this syntactic visitor cannot see
+  /// (freezed's `with _$X` is the common case); being extended by something
+  /// in this file makes [node] a base, whose constructor serves `super()`
+  /// calls rather than blocking instantiation.
+  bool _participatesInHierarchy(ClassDeclaration node) =>
+      node.extendsClause != null ||
+      node.withClause != null ||
+      _extendedInUnit.contains(node.name.lexeme);
+}
+
+/// The three facts a class's member list is scanned for: whether it has any
+/// non-constructor member, whether it has a constructor, and whether every
+/// non-constructor member is `static`.
+class _MemberSummary {
+  const _MemberSummary({
+    required this.hasMember,
+    required this.hasConstructor,
+    required this.allStatic,
+  });
+
+  final bool hasMember;
+  final bool hasConstructor;
+  final bool allStatic;
 }

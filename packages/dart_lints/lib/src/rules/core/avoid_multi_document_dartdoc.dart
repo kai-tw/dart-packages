@@ -104,24 +104,7 @@ class _Visitor extends LintVisitor {
     // line.
     Token? token = node.beginToken;
     while (token != null) {
-      Token? comment = token.precedingComments;
-      while (comment != null) {
-        final String lexeme = comment.lexeme;
-        if (_isDocLine(lexeme)) {
-          final int line = lineInfo.getLocation(comment.offset).lineNumber;
-          final int? blockLine = _blockLine;
-          if (blockLine != null && line != blockLine + 1) {
-            _closeBlock();
-          }
-          _blockLine = line;
-          if (_headingOffset == null && _isHeading(lexeme)) {
-            _headingOffset = comment.offset;
-          }
-        } else {
-          _closeBlock();
-        }
-        comment = comment.next;
-      }
+      _scanPrecedingComments(token);
       if (token.type == TokenType.EOF) {
         break;
       }
@@ -130,5 +113,26 @@ class _Visitor extends LintVisitor {
     _closeBlock();
 
     super.visitCompilationUnit(node);
+  }
+
+  void _scanPrecedingComments(Token token) {
+    Token? comment = token.precedingComments;
+    while (comment != null) {
+      final String lexeme = comment.lexeme;
+      if (_isDocLine(lexeme)) {
+        final int line = lineInfo.getLocation(comment.offset).lineNumber;
+        final int? blockLine = _blockLine;
+        if (blockLine != null && line != blockLine + 1) {
+          _closeBlock();
+        }
+        _blockLine = line;
+        if (_headingOffset == null && _isHeading(lexeme)) {
+          _headingOffset = comment.offset;
+        }
+      } else {
+        _closeBlock();
+      }
+      comment = comment.next;
+    }
   }
 }
