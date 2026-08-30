@@ -138,17 +138,26 @@ class _Visitor extends LintVisitor {
   }
 
   /// `C` for an unnamed constructor, `C.named` for a named one.
+  ///
+  /// Reads `returnType`, not the newer `typeName` — `ConstructorDeclaration`
+  /// only grew `typeName` in a later analyzer release, and this package's own
+  /// `pubspec.yaml` still supports analyzer 9. `returnType` is deprecated in
+  /// favor of `typeName` on the versions that have both, but it is the only
+  /// name that resolves across the whole supported range, and it is
+  /// non-nullable on every version — this rule already found this exact
+  /// method too complex once; do not reintroduce a null-fallback chain here
+  /// to "modernize" it without checking the floor of the range again.
   String _constructorLabel(ConstructorDeclaration node) {
     final String? ctorName = node.name?.lexeme;
-    final String typeName = node.typeName?.name ?? '';
+    final String typeName = node.returnType.name;
     return ctorName == null ? typeName : '$typeName.$ctorName';
   }
 
-  /// The constructor's own name token when present, else the enclosing
-  /// type's name — an unnamed constructor still has to anchor its report
+  /// The constructor's own name token when present, else its return-type
+  /// identifier — an unnamed constructor still has to anchor its report
   /// somewhere.
   int _constructorOffset(ConstructorDeclaration node) =>
-      node.name?.offset ?? node.typeName?.offset ?? node.offset;
+      node.name?.offset ?? node.returnType.offset;
 
   @override
   void visitFunctionExpression(FunctionExpression node) {

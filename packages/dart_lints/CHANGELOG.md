@@ -1,3 +1,26 @@
+## 0.5.1
+
+0.5.0 broke `dart run dart_lints` entirely — not just the new rule — for
+any consumer resolving analyzer <10. `avoid_high_cyclomatic_complexity`'s
+`visitConstructorDeclaration` read `ConstructorDeclaration.typeName`,
+which doesn't exist before analyzer 10; `dart_lints`'s own `pubspec.yaml`
+allows `analyzer: ">=9.0.0 <11.0.0"`, so this was never actually
+compatible with the floor of its own declared range, not an edge case
+outside it. The failure was a compile error in the whole tool (exit 255),
+not a silently-disabled rule — loud in the right direction, but it still
+took the entire lint run down for that consumer, not just this one rule.
+
+Fixed by reading `returnType` instead — deprecated in favor of `typeName`
+on the analyzer versions that have both, but it is the only name that
+resolves across the whole `>=9.0.0 <11.0.0` range, and non-nullable on
+every version in it, so the fix is simpler than the code it replaces, not
+just older. Verified directly against both analyzer 9.0.0's and 10.2.0's
+own AST source (not assumed): every other analyzer API this rule uses —
+the pattern-matching classes (`GuardedPattern`, `SwitchExpressionCase`,
+`CaseClause`, `WildcardPattern`, `IfElement`, `ForElement`) and the three
+`isNullAware` getters — already existed identically across the whole
+range: `typeName` was the only rename between 9 and 10.
+
 ## 0.5.0
 
 New rule: `avoid_high_cyclomatic_complexity`. Counts independent paths
