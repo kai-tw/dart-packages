@@ -1,3 +1,38 @@
+## 0.5.0
+
+New rule: `avoid_high_cyclomatic_complexity`. Counts independent paths
+through a function, method, constructor, or closure — `if`/`for`/`while`/
+`do`/`catch`/switch `case`/`&&`/`||`/`??`/`?:`/null-aware access, plus a
+pattern-match guard (`case ... when ...`) as one more on top of the branch
+it guards — and reports when the total exceeds a configured
+`maxComplexity`. This is the structural half of Savoia & Evans's CRAP
+metric (`CC² × (1 − cov)³ + CC`): at 100% coverage the coverage term
+vanishes and CRAP degenerates to plain CC, which is exactly what this rule
+computes. The other half — per-function coverage — needs a format this
+rule does not consume, so it stays out of scope until a coverage strategy
+is chosen.
+
+Every function-shaped node is its own unit, closures included: a branchy
+callback passed to `.map` or a `builder:` is measured on its own, not
+folded into whatever method happens to pass it along, so it cannot hide
+there and cannot inflate a simple method's count either. `maxComplexity`
+has no default — it is a required option, because the usual numbers (4-8)
+assume 100% coverage, which a Flutter UI layer often cannot reach, and
+`dart_lints.yaml`'s per-`areas` `optionOverrides` can already carry
+different values per layer without any change to this rule. This is the
+first rule with a genuinely required option, which surfaced a real gap:
+omitting it used to reach the rule's constructor as a bare `null` and fail
+as a raw `TypeError` instead of a config error naming the rule and the
+option — the exact silent-failure shape `RuleDescriptor.options` exists to
+prevent for a wrong-typed value, just not for an absent one.
+`RuleDescriptor` now has `requiredOptions`, checked in `RuleRegistry.build`
+against the fully area-resolved option view, so a project that enables
+this rule without setting `maxComplexity` gets a clear
+`DartLintsConfigException` instead.
+
+Also new: `OptionKind.integer`, since no existing rule took a numeric
+option — `maxComplexity` is the first.
+
 ## 0.4.6
 
 `public_class_names_its_file` treated a `.design.dart` marker suffix as part

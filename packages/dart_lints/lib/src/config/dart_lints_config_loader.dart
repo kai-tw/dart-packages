@@ -371,6 +371,14 @@ class DartLintsConfigLoader {
           '"$at" must be a list of maps, got ${_typeName(value)}',
           configPath: configPath,
         );
+      case OptionKind.integer:
+        if (value is int) {
+          return value;
+        }
+        throw DartLintsConfigException(
+          '"$at" must be an integer, got ${_typeName(value)}',
+          configPath: configPath,
+        );
     }
   }
 

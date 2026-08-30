@@ -96,6 +96,14 @@ void boom() {
 void log(Object value) {
   LogSystem.error('failed for $value');
 }
+
+int classify(int x) {
+  if (x < 0) return -1;
+  if (x == 0) return 0;
+  if (x < 10) return 1;
+  if (x < 100) return 2;
+  return 3;
+}
 ''';
 
 const String _config = '''
@@ -103,6 +111,10 @@ analyzer:
   command: none
 
 bundles: [core, flutter, bloc, log_system]
+
+options:
+  avoid_high_cyclomatic_complexity:
+    maxComplexity: 4
 
 areas:
   production:
@@ -193,6 +205,20 @@ void main() {
       ]),
     );
   });
+
+  test(
+    'a rule with a required option actually fires once the option is set',
+    () {
+      // Regression coverage for the required-options mechanism itself: a
+      // typo'd or missing maxComplexity would throw in setUpAll above,
+      // failing every test in this file — this confirms the option that IS
+      // set also actually reaches the rule and does something with it.
+      expect(
+        _rulesIn(violations, 'lib'),
+        contains('avoid_high_cyclomatic_complexity'),
+      );
+    },
+  );
 
   test('a resolved-AST rule resolves the stubbed supertype chain', () {
     // `Counter extends Cubit<int>` is only reachable through type resolution;

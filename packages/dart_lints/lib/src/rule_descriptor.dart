@@ -13,6 +13,9 @@ enum OptionKind {
 
   /// A list of maps, e.g. `reservedSuffixes: [{suffix: Sheet, unless: …}]`.
   mapList,
+
+  /// A single whole number, e.g. `maxComplexity: 6`.
+  integer,
 }
 
 /// The registry's entry for one rule: its identity, the bundle it ships in, the
@@ -28,11 +31,21 @@ class RuleDescriptor {
     required this.bundle,
     required this.create,
     this.options = const <String, OptionKind>{},
+    this.requiredOptions = const <String>{},
   });
 
   final String name;
   final String bundle;
   final Map<String, OptionKind> options;
+
+  /// Keys in [options] that must be present in the merged view — after area
+  /// overrides are resolved — for this rule to be enabled.
+  ///
+  /// [options] alone only catches a wrong-typed value; a key that is simply
+  /// absent sails through it and reaches [create] as `null`, which fails as
+  /// a raw [TypeError] instead of a message naming the rule and the option —
+  /// the same silent-failure shape [options] itself exists to prevent.
+  final Set<String> requiredOptions;
 
   /// Builds the rule from its already-validated options.
   final Object Function(Map<String, Object?> options) create;

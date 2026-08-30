@@ -1,0 +1,377 @@
+import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:dart_lints/src/lint_rule_base.dart';
+import 'package:dart_lints/src/rules/core/avoid_high_cyclomatic_complexity.dart';
+import 'package:test/test.dart';
+
+/// Parses [source] syntactically and runs the rule's visitor over it.
+List<LintViolation> _lint(String source, {required int maxComplexity}) {
+  final ParseStringResult result = parseString(
+    content: source,
+    throwIfDiagnostics: false,
+  );
+  final AvoidHighCyclomaticComplexity rule = AvoidHighCyclomaticComplexity(
+    maxComplexity: maxComplexity,
+  );
+  final LintVisitor visitor = rule.createVisitor(
+    'lib/foo.dart',
+    result.lineInfo,
+    source,
+  );
+  result.unit.accept(visitor);
+  return visitor.violations;
+}
+
+/// The lowest `maxComplexity` at which [source] stops reporting at all —
+/// which, for a source with exactly one measurable unit, is that unit's
+/// actual computed complexity. Probing the real behaviour this way tests the
+/// computed number directly instead of parsing it back out of a message.
+int _measuredComplexity(String source, {int upTo = 30}) {
+  for (int max = 0; max <= upTo; max++) {
+    if (_lint(source, maxComplexity: max).isEmpty) {
+      return max;
+    }
+  }
+  throw StateError('complexity exceeds $upTo');
+}
+
+void main() {
+  group('a straight-line unit has complexity 1', () {
+    test('[partition] a function with no branches', () {
+      expect(_measuredComplexity('void f() { print(1); }'), 1);
+    });
+
+    test('[boundary] exactly at the max does not report', () {
+      expect(_lint('void f() { print(1); }', maxComplexity: 1), isEmpty);
+    });
+
+    test('[boundary] one under the max reports', () {
+      final List<LintViolation> found = _lint(
+        'void f() { print(1); }',
+        maxComplexity: 0,
+      );
+      expect(found, hasLength(1));
+      expect(found.single.message, contains('complexity 1'));
+      expect(found.single.message, contains('max of 0'));
+    });
+  });
+
+  group('each branch point adds exactly 1', () {
+    test('[partition] if', () {
+      expect(
+        _measuredComplexity('void f(bool a) { if (a) { print(1); } }'),
+        2,
+      );
+    });
+
+    test('[partition] for (C-style)', () {
+      expect(
+        _measuredComplexity('''
+void f(List<int> xs) {
+  for (int i = 0; i < xs.length; i++) {
+    print(i);
+  }
+}
+'''),
+        2,
+      );
+    });
+
+    test('[partition] for-in', () {
+      expect(
+        _measuredComplexity('''
+void f(List<int> xs) {
+  for (final int x in xs) {
+    print(x);
+  }
+}
+'''),
+        2,
+      );
+    });
+
+    test('[partition] while', () {
+      expect(
+        _measuredComplexity('''
+void f(bool Function() cond) {
+  while (cond()) {
+    print(1);
+  }
+}
+'''),
+        2,
+      );
+    });
+
+    test('[partition] do-while', () {
+      expect(
+        _measuredComplexity('''
+void f(bool Function() cond) {
+  do {
+    print(1);
+  } while (cond());
+}
+'''),
+        2,
+      );
+    });
+
+    test('[partition] each catch clause on a try', () {
+      expect(
+        _measuredComplexity('''
+void f() {
+  try {
+    doThing();
+  } on FormatException catch (e) {
+    print(e);
+  } on StateError {
+    print('state');
+  } catch (e) {
+    print(e);
+  }
+}
+'''),
+        4,
+      );
+    });
+
+    test('[partition] &&, ||, and ?? each count, chained ones add up', () {
+      expect(
+        _measuredComplexity('bool f(bool a, bool b, bool c) => a && b || c;'),
+        3,
+      );
+      expect(
+        _measuredComplexity(
+          "String f(String? a, String? b) => a ?? b ?? 'd';",
+        ),
+        3,
+      );
+    });
+
+    test('[partition] the ?: ternary', () {
+      expect(_measuredComplexity('int f(bool a) => a ? 1 : 0;'), 2);
+    });
+
+    test('[partition] null-aware member access', () {
+      expect(_measuredComplexity('int? f(A? a) => a?.value;'), 2);
+    });
+
+    test('[partition] null-aware method call', () {
+      expect(_measuredComplexity('void f(A? a) => a?.doThing();'), 2);
+    });
+
+    test('[partition] null-aware index access', () {
+      expect(_measuredComplexity('int? f(List<int>? a) => a?[0];'), 2);
+    });
+
+    test('[boundary] an if-else is one IfStatement, not two', () {
+      expect(
+        _measuredComplexity('int f(bool a) { if (a) return 1; return 0; }'),
+        2,
+      );
+    });
+  });
+
+  group('switch cases are decision points, default and wildcard are not', () {
+    test('[partition] each value case adds 1, default does not', () {
+      expect(
+        _measuredComplexity('''
+void f(int x) {
+  switch (x) {
+    case 1:
+      print('one');
+      break;
+    case 2:
+      print('two');
+      break;
+    default:
+      print('other');
+  }
+}
+'''),
+        3,
+      );
+    });
+
+    test('[partition] a pattern case adds 1, its guard adds 1 more', () {
+      expect(
+        _measuredComplexity('''
+void f(Object x) {
+  switch (x) {
+    case int n when n > 0:
+      print(n);
+    default:
+      print('other');
+  }
+}
+'''),
+        3,
+      );
+    });
+
+    test(
+      '[boundary] a switch expression counts each case, skips the wildcard',
+      () {
+        expect(
+          _measuredComplexity('''
+String f(Object x) {
+  return switch (x) {
+    int n when n > 0 => 'pos',
+    int() => 'nonpos',
+    _ => 'other',
+  };
+}
+'''),
+          4,
+        );
+      },
+    );
+  });
+
+  group('an if-case guard is a second condition on the same branch', () {
+    test('[boundary] if-case with a guard adds 2: the if and the guard', () {
+      expect(
+        _measuredComplexity('''
+void f(Object x) {
+  if (x case int n when n > 0) {
+    print(n);
+  }
+}
+'''),
+        3,
+      );
+    });
+  });
+
+  group('collection if/for elements are branch points too', () {
+    test('[partition] an if element', () {
+      expect(_measuredComplexity('List<int> f(bool a) => [1, if (a) 2];'), 2);
+    });
+
+    test('[boundary] an if element with a guard adds 2', () {
+      expect(
+        _measuredComplexity(
+          'List<int> f(Object x) => [1, if (x case int n when n > 0) n];',
+        ),
+        3,
+      );
+    });
+
+    test('[partition] a for element', () {
+      expect(
+        _measuredComplexity(
+          'List<int> f(List<int> xs) => [for (final int x in xs) x * 2];',
+        ),
+        2,
+      );
+    });
+  });
+
+  group('every function-shaped node is its own unit', () {
+    test('[partition] a method is measured under its own name', () {
+      final List<LintViolation> found = _lint('''
+class C {
+  void f(bool a) {
+    if (a) {
+      print(1);
+    }
+  }
+}
+''', maxComplexity: 1);
+      expect(found, hasLength(1));
+      expect(found.single.message, contains("'f'"));
+    });
+
+    test('[partition] a named constructor is labelled Type.name', () {
+      final List<LintViolation> found = _lint('''
+class C {
+  C.named(bool a) {
+    if (a) {
+      print(1);
+    }
+  }
+}
+''', maxComplexity: 1);
+      expect(found, hasLength(1));
+      expect(found.single.message, contains("'C.named'"));
+    });
+
+    test('[partition] an unnamed constructor is labelled by its type', () {
+      final List<LintViolation> found = _lint('''
+class C {
+  C(bool a) {
+    if (a) {
+      print(1);
+    }
+  }
+}
+''', maxComplexity: 1);
+      expect(found, hasLength(1));
+      expect(found.single.message, contains("'C'"));
+    });
+
+    test(
+      '[boundary] a local function is its own unit, not folded into the '
+      'function that declares it',
+      () {
+        final List<LintViolation> found = _lint('''
+void outer() {
+  void local() {
+    if (true) {
+      print(1);
+    }
+  }
+  local();
+}
+''', maxComplexity: 1);
+        expect(found, hasLength(1));
+        expect(found.single.message, contains("'local'"));
+      },
+    );
+
+    test(
+      '[boundary] a closure is its own unit, not folded into the method '
+      'that passes it along',
+      () {
+        final List<LintViolation> found = _lint('''
+class C {
+  void build(List<int> xs) {
+    xs.forEach((int x) {
+      if (x > 0) {
+        print(x);
+      }
+    });
+  }
+}
+''', maxComplexity: 1);
+        expect(found, hasLength(1));
+        expect(found.single.message, contains("closure in 'build'"));
+      },
+    );
+
+    test(
+      '[boundary] a closure with no enclosing named unit is labelled '
+      'generically',
+      () {
+        final List<LintViolation> found = _lint('''
+final Function f = (int x) {
+  if (x > 0) {
+    print(x);
+  }
+};
+''', maxComplexity: 1);
+        expect(found, hasLength(1));
+        expect(found.single.message, contains('this closure'));
+      },
+    );
+  });
+
+  group('a body-less declaration is not measured', () {
+    test('[boundary] an abstract method does not report at any threshold', () {
+      expect(
+        _lint('abstract class C { void f(); }', maxComplexity: 0),
+        isEmpty,
+      );
+    });
+  });
+}

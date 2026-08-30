@@ -1,4 +1,5 @@
 import 'built_rules.dart';
+import 'config/dart_lints_config_exception.dart';
 import 'lint_rule_base.dart';
 import 'rule_descriptor.dart';
 import 'rules/bloc/avoid_emit_after_await.dart';
@@ -19,6 +20,7 @@ import 'rules/core/avoid_catching_base_exception.dart';
 import 'rules/core/avoid_catching_error.dart';
 import 'rules/core/avoid_catching_object.dart';
 import 'rules/core/avoid_empty_catch.dart';
+import 'rules/core/avoid_high_cyclomatic_complexity.dart';
 import 'rules/core/avoid_lint_suppression.dart';
 import 'rules/core/avoid_multi_document_dartdoc.dart';
 import 'rules/core/avoid_production_null_assertion.dart';
@@ -98,6 +100,15 @@ class RuleRegistry {
       name: 'avoid_empty_catch',
       bundle: 'core',
       create: (Map<String, Object?> o) => AvoidEmptyCatch(),
+    ),
+    RuleDescriptor(
+      name: 'avoid_high_cyclomatic_complexity',
+      bundle: 'core',
+      options: <String, OptionKind>{'maxComplexity': OptionKind.integer},
+      requiredOptions: <String>{'maxComplexity'},
+      create: (Map<String, Object?> o) => AvoidHighCyclomaticComplexity(
+        maxComplexity: o['maxComplexity'] as int,
+      ),
     ),
     RuleDescriptor(
       name: 'avoid_lint_suppression',
@@ -491,7 +502,15 @@ class RuleRegistry {
       if (!names.contains(descriptor.name)) {
         continue;
       }
-      final Object rule = descriptor.create(optionsFor(descriptor.name));
+      final Map<String, Object?> resolvedOptions = optionsFor(descriptor.name);
+      for (final String required in descriptor.requiredOptions) {
+        if (!resolvedOptions.containsKey(required)) {
+          throw DartLintsConfigException(
+            'rule "${descriptor.name}" requires option "$required"',
+          );
+        }
+      }
+      final Object rule = descriptor.create(resolvedOptions);
       switch (rule) {
         case final LintRule r:
           syntax.add(r);

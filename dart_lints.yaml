@@ -50,6 +50,14 @@ areas:
       - avoid_catching_base_exception
 
 options:
+  avoid_high_cyclomatic_complexity:
+    # PLACEHOLDER, not a policy decision. dart_lints 0.5.0 added this rule
+    # with no default on purpose — the real number is a judgment call about
+    # a coverage target this workspace hasn't made yet (see the rule's own
+    # doc comment and CHANGELOG 0.5.0). Set high enough that nothing here
+    # currently trips it, so the rule is live and visible without turning
+    # into an unplanned cleanup pass.
+    maxComplexity: 20
   avoid_top_level_identifiers:
     # These packages are published libraries: their top-level declarations are
     # the public API, not stray globals. The rule's premise does not hold here.
