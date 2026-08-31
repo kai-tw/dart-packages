@@ -400,7 +400,7 @@ void main() {
           final Uint8List png = await _encodePng(8, 8);
 
           await expectLater(
-            ImageCodec.encodeWebp(png),
+            WebpEncoder.encodeWebp(png),
             throwsA(isA<ImageCodecException>()),
           );
         },

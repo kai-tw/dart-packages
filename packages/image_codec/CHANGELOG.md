@@ -1,10 +1,17 @@
 ## 0.1.0
 
-Initial release. Extracts NovelGlide's `ImageProcessor` into a shared package:
-`readImageSize` (header dimensions without decoding pixels),
-`isPixelDataComplete` (1x1 decode proving the pixel stream is whole),
-`decodeImageSizes` (the batch form), `encodeWebp` (re-encode), and the
-`ImageSize` value object.
+Initial release. Extracts NovelGlide's `ImageProcessor` into a shared package,
+as **two** types rather than one: `ImageCodec` reads facts out of bytes
+(`readImageSize`, `isPixelDataComplete`, `decodeImageSizes`) and `WebpEncoder`
+turns bytes into other bytes (`encodeWebp`). Plus the `ImageSize` value object.
+
+The split is not cosmetic. The two halves have different dependencies
+(`dart:ui` versus `package:image` + a native plugin), different failure modes,
+and different testability: every read is exercised by the unit suite, while
+nothing in the encoder runs under `flutter test` at all — no platform
+compressor is registered there. As one file, mutation testing scored 41%,
+which reads as "under-tested" and actually meant "one well-tested half
+averaged with one unreachable half". As two: 100% and 32%, both true.
 
 The product is the **unified exception interface**, not the individual
 operations. Three libraries underneath fail in three shapes across two type
@@ -54,7 +61,12 @@ for a header parser and not for a real decoder. All use plain `test()` — a
 against real engine work, surfacing as a ten-minute timeout instead of a failed
 assertion.
 
-Known limitations are in the README: no unit coverage of a *successful*
-`encodeWebp` (the compressor cannot run under `flutter test` at all), the
-passthrough's inability to detect a wrong-but-plausible native decode, and
-`ImageDecodeException` currently having no thrower.
+Known limitations are in the README: `webp_encoder.dart` being structurally
+unmeasurable by the unit suite, the passthrough's inability to detect a
+wrong-but-plausible native decode, `ImageDecodeException` currently having no
+thrower, and one engine handle — `ui.ImmutableBuffer` — whose release cannot
+be asserted at all, because `base class` forbids a test implementing it.
+
+The standing rules a future editor must not break — the one-file `dart:ui`
+surface, prevent-don't-catch, keeping the two types separate, and why the
+factory seam is not test cruft — are in this package's `CLAUDE.md`.

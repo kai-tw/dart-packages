@@ -319,7 +319,7 @@ void main() {
       // assertion still passes here. Naming the message is what makes this
       // test able to go red for its own reason.
       expect(
-        () => ImageCodec.encodeWebp(Uint8List(0)),
+        () => WebpEncoder.encodeWebp(Uint8List(0)),
         throwsA(
           isA<ImageEncodeException>().having(
             (ImageEncodeException e) => e.message,

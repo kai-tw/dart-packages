@@ -9,8 +9,14 @@ one, and never learns that three of them fail in three different shapes.
 ```dart
 final ImageSize? size = await ImageCodec.readImageSize(bytes);
 final bool whole = await ImageCodec.isPixelDataComplete(bytes);
-final Uint8List webp = await ImageCodec.encodeWebp(bytes);   // Android/iOS
+final Uint8List webp = await WebpEncoder.encodeWebp(bytes);   // Android/iOS
 ```
+
+Two types, deliberately. `ImageCodec` reads facts out of bytes;
+`WebpEncoder` turns bytes into other bytes. They have different dependencies
+(`dart:ui` versus `package:image` plus a native plugin), different failure
+modes, and different testability — every read is exercised by the unit suite,
+while nothing in the encoder runs under `flutter test` at all.
 
 ## Two questions that look like one
 
@@ -69,7 +75,7 @@ If you build output by iterating the result map, an unreadable input **silently
 vanishes**. To degrade instead of dropping, iterate your own input keys and look
 each one up.
 
-## `encodeWebp` is Android and iOS only, and it resizes
+## `WebpEncoder.encodeWebp` is Android and iOS only, and it resizes
 
 `flutter_image_compress` hard-gates WebP to those two platforms and throws
 `UnsupportedError` elsewhere; with no platform implementation registered — the
@@ -95,11 +101,19 @@ bounds — that is the contract. Pass your own bounds to change it.
 
 ## Known limitations
 
-- **`encodeWebp` has no unit-test coverage of a successful encode.** The
+- **`webp_encoder.dart` is structurally unmeasurable by the unit suite.** The
   compressor cannot run under `flutter test` at all (no registered platform
-  implementation), so the success path needs `integration_test/` on a real
-  device. What the suite does pin is that failure arrives as
-  `ImageCodecException` rather than as one of the three underlying shapes.
+  implementation), so every line after the platform guard is unreachable
+  there. Mutation testing scores it 32%, and that number will not improve by
+  writing more unit tests — only `integration_test/` on a real device moves
+  it. What the suite does pin is that failure arrives as `ImageCodecException`
+  rather than as one of the three underlying shapes.
+
+  This is why the encoder is its own file. Combined with the read half the
+  score was 41%, which reads as "under-tested" and actually meant "one
+  well-tested half averaged with one unreachable half". Split, the two numbers
+  are 100% and 32% — both true, and the per-file gate now means something on
+  the half where it can.
 - **The passthrough cannot detect a wrong-but-plausible native decode.** Its
   output is verified by reading the dimensions back, which catches "not an image
   at all" but not correct-sized-wrong-pixels. Establishing that needs a real
