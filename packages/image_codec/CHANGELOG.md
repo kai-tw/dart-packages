@@ -1,3 +1,20 @@
+## 0.1.1
+
+**Use this instead of 0.1.0.** That tag ships `encodeWebp` with its resize
+parameters named `maxWidth`/`maxHeight`, which is backwards: they are a floor
+on the result, not a ceiling. `maxHeight: 2000` returns something 2400 tall.
+The names are `minWidth`/`minHeight` again — the plugin's own, and correct.
+
+Nothing else changed. 0.1.0 was tagged and had no consumers when the defect
+was found, so it is left in place rather than moved.
+
+Also corrects `decodeImageSizes`' doc, which asserted that a header read is
+too cheap for a `compute()` hop to be worth it. That claim was inherited from
+the source contract and never tested. The engine is root-isolate-only, so this
+package cannot offer that hop at all — a consumer migrating off a pure-Dart
+reader that DID use `compute()` is moving real CPU onto the UI thread, and the
+doc now says so and tells them to measure their own largest batch.
+
 ## 0.1.0
 
 Initial release. Extracts NovelGlide's `ImageProcessor` into a shared package,
