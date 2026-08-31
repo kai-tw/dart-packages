@@ -1,3 +1,36 @@
+## 0.1.2
+
+Relaxes `image` from `^4.5.0` to `>=4.3.0 <5.0.0`, which unblocks any consumer
+held at `archive` 3.
+
+`image >=4.4.0` depends on `archive ^4`, so the old constraint silently
+imposed archive 4 on every app that took this package — and an EPUB reader
+pinned to archive 3 by a vendored parser fork is not an exotic situation. The
+first consumer hit exactly that and could not resolve at all. `^4.5.0` was
+never a requirement; it was the version this package happened to be developed
+against.
+
+`package:image` is used here for three calls in one private function —
+`decodeImage`, `encodePng`, and an `on ImageException` — all of which predate
+4.3.0 by years.
+
+Verified by forcing the joint solve a consumer will do rather than by reading
+version tables: adding `archive: ^3.6.1` as a real constraint (a
+`dependency_overrides` bypasses solving rather than simulating it, and
+produces a combination pub would never reach on its own) resolves to
+image 4.3.0 + archive 3.6.1, with `dart analyze` clean and all 35 tests
+passing against it.
+
+A consumer needs no upper bound of its own: `>=4.3.0 <5.0.0` admits 4.3.0
+through 4.x, and their own `archive` constraint is what pins it down.
+
+Still open, deliberately not folded in: `package:image` may not need to be
+here at all. The fallback decodes bytes and re-encodes them as PNG, and the
+engine does both. Dropping it would take `image` and `archive` out of every
+consumer's graph — at the cost of losing the `compute()` hop, since the engine
+is root-isolate-only. That trades against the same UI thread, so it wants a
+measurement and its own decision rather than a quiet change.
+
 ## 0.1.1
 
 **Use this instead of 0.1.0.** That tag ships `encodeWebp` with its resize
