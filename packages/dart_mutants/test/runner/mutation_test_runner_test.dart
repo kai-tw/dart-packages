@@ -56,14 +56,17 @@ void main() {}
 ''');
 
   // invalid.dart: a `??` whose "left alone" mutant is a guaranteed compile
-  // error (String? assigned to an explicitly non-nullable String), and
+  // error (String? returned from an explicitly non-nullable String), and
   // whose "fallback alone" mutant compiles fine and is caught by the test.
-  File(p.join(dir.path, 'lib', 'invalid.dart')).writeAsStringSync('''
-String withDefault(String? a) {
-  final String result = a ?? 'the default';
-  return result;
-}
-''');
+  //
+  // Deliberately an EXPRESSION body, not a block. Every fixture here is
+  // built to isolate exactly one operator's mutants so the counts below
+  // stay sharp assertions rather than running totals, and a block body
+  // hands `statement_deletion` a mutant per statement — which is correct
+  // behaviour on its part, just not what this file is measuring.
+  File(p.join(dir.path, 'lib', 'invalid.dart')).writeAsStringSync(
+    "String withDefault(String? a) => a ?? 'the default';\n",
+  );
   File(p.join(dir.path, 'test', 'invalid_test.dart')).writeAsStringSync('''
 import 'package:fixture/invalid.dart';
 import 'package:test/test.dart';
@@ -93,12 +96,20 @@ void main() {
   // covers exactly that), but swapping the ternary's branches routes into a
   // genuine, synchronous, non-yielding infinite loop — the shape no
   // event-loop-based test timeout can preempt.
-  File(p.join(dir.path, 'lib', 'hangs.dart')).writeAsStringSync('''
-String process(bool takeSafePath) => takeSafePath ? _safe() : _hang();
-
-String _safe() => 'ok';
-
-String _hang() {
+  //
+  // The non-terminating loop lives in its own file, which is NEVER passed
+  // to the runner and so is never mutated. It has to: an infinite loop needs
+  // a block body, a block body gets one `statement_deletion` mutant per
+  // statement, and `while (true)` gets a `condition_negation` one — all
+  // landing on this file and burying the single timing-out mutant this test
+  // is about. Keeping the hang out of the mutated file leaves `hangs.dart`
+  // with exactly one candidate: the ternary swap that routes into it.
+  File(p.join(dir.path, 'lib', 'hangs.dart')).writeAsStringSync(
+    "import 'hang_helper.dart';\n\n"
+    "String process(bool takeSafePath) => takeSafePath ? 'ok' : hang();\n",
+  );
+  File(p.join(dir.path, 'lib', 'hang_helper.dart')).writeAsStringSync('''
+String hang() {
   // ignore: literal_only_boolean_expressions
   while (true) {}
 }
@@ -117,7 +128,9 @@ void main() {
     'get',
   ], workingDirectory: dir.path);
   if (pubGet.exitCode != 0) {
-    throw StateError('dart pub get failed:\n${pubGet.stdout}\n${pubGet.stderr}');
+    throw StateError(
+      'dart pub get failed:\n${pubGet.stdout}\n${pubGet.stderr}',
+    );
   }
   return dir;
 }
@@ -237,21 +250,24 @@ void main() {
       () {
         expect(
           File(p.join(dir.path, 'lib', 'hangs.dart')).readAsStringSync(),
-          contains('takeSafePath ? _safe() : _hang()'),
+          contains("takeSafePath ? 'ok' : hang()"),
         );
       },
     );
 
-    test('[partition] every mutated file ends the run back at its own original content', () {
-      expect(
-        File(p.join(dir.path, 'lib', 'detected.dart')).readAsStringSync(),
-        "String classify(bool isPositive) => isPositive ? 'positive' : 'negative';\n",
-      );
-      expect(
-        File(p.join(dir.path, 'lib', 'invalid.dart')).readAsStringSync(),
-        contains("a ?? 'the default'"),
-      );
-    });
+    test(
+      '[partition] every mutated file ends the run back at its own original content',
+      () {
+        expect(
+          File(p.join(dir.path, 'lib', 'detected.dart')).readAsStringSync(),
+          "String classify(bool isPositive) => isPositive ? 'positive' : 'negative';\n",
+        );
+        expect(
+          File(p.join(dir.path, 'lib', 'invalid.dart')).readAsStringSync(),
+          contains("a ?? 'the default'"),
+        );
+      },
+    );
   });
 
   group('a red baseline', () {

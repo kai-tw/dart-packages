@@ -1,3 +1,48 @@
+## 0.2.0
+
+Four new operators, closing the half of the mutation space the initial
+release deliberately left to a tool that no longer runs: `statement_deletion`
+(one statement replaced with an empty `;`), `condition_negation`
+(`if (x)` -> `if (!(x))`, skipping conditions `relational_operator_replacement`
+already covers), `logical_operator_replacement` (`&&` <-> `||`), and
+`arithmetic_operator_replacement` (`+` <-> `-`, `*` <-> `/`).
+
+The first four operators all ask "is this expression's branch or boundary
+pinned?" — they presume a line runs and probe which way it went. None of them
+asks whether a line's effect is asserted at all, so a guard like
+`if (mounted) { setState(...) }` — no ternary, no `??`, no comparison —
+produced zero mutants and reported a clean score for code nothing measured.
+Measured one construct per file under 0.1.0: an `if` guard, `&&`/`||`, plain
+statements, and `n - 1` each produced ZERO.
+
+This is not a change of mind about scope. 0.1.0 was scoped to complement a
+regex-based mutator running alongside it, which is why the README said
+`&&`/`||` were "deliberately not reimplemented". That mutator was then
+*replaced* by this package rather than joined by it (`plan-mutation`'s own
+script records both the replacement and the removal of its flags), so the
+coverage it contributed left with it. The scope never changed; the
+arrangement it was scoped against did.
+
+**Expect existing scores to drop.** These operators generate mutants current
+suites do not kill, so a file's percentage will fall — that is the first
+honest measurement of it, not a regression. A caller gating on a per-file
+threshold should expect to revisit that threshold, or stage the rollout.
+
+The output contract gains a fourth guarantee: **a path comes back exactly as
+it was passed in**, echoed rather than normalised. This was always the
+behaviour and was never written down, so a caller had to infer it — and one
+inferred it wrong, keying its report lookup on absolute paths against a run
+that had passed relative ones, which matched nothing. `files` is keyed by
+that path, so the form has to match; it is now documented and covered by a
+CLI test asserting both directions.
+
+Two integration fixtures were rewritten rather than having their expected
+counts raised: they exist to isolate one mutant each so the gate-mechanics
+assertions stay sharp, and bumping counts would make them churn on every
+future operator. `test/operators_test.dart` is a new regression guard
+asserting that each previously-blind construct is now reachable by some
+operator.
+
 ## 0.1.0
 
 Initial release. AST-based mutation testing, built to cover exactly what a

@@ -112,4 +112,57 @@ void main() {
       expect(json['files'], isEmpty);
     },
   );
+
+  test(
+    '[boundary] a file path comes back exactly as it was passed in, not '
+    'normalised to absolute or to relative — `files` is KEYED by it, so a '
+    'caller matching the report against its own requested list depends on '
+    'the two forms being identical',
+    () async {
+      final Directory dir = await _fixtureWithOneUndetectedMutant();
+      addTearDown(() => dir.deleteSync(recursive: true));
+
+      // Deliberately relative, and deliberately asserted as the same string
+      // rather than via p.equals: a caller keying a lookup on these paths
+      // cares about the literal bytes, not about path equivalence.
+      const String relative = 'lib/uncovered.dart';
+      final ProcessResult relativeRun = await Process.run('dart', <String>[
+        'run',
+        _binPath,
+        '--test-command',
+        'dart test',
+        '--json',
+        relative,
+      ], workingDirectory: dir.path);
+
+      final Map<String, Object?> relativeJson =
+          jsonDecode(relativeRun.stdout as String) as Map<String, Object?>;
+      final Map<String, Object?> relativeFiles =
+          relativeJson['files']! as Map<String, Object?>;
+      expect(relativeFiles.keys, <String>[relative]);
+      expect(
+        (relativeFiles[relative]! as Map<String, Object?>)['filePath'],
+        relative,
+      );
+
+      // The same file by absolute path comes back absolute — which is what
+      // makes this an echo rather than a normalisation to either form.
+      final String absolute = p.join(dir.path, 'lib', 'uncovered.dart');
+      final ProcessResult absoluteRun = await Process.run('dart', <String>[
+        'run',
+        _binPath,
+        '--test-command',
+        'dart test',
+        '--json',
+        absolute,
+      ], workingDirectory: dir.path);
+
+      final Map<String, Object?> absoluteJson =
+          jsonDecode(absoluteRun.stdout as String) as Map<String, Object?>;
+      expect(
+        (absoluteJson['files']! as Map<String, Object?>).keys,
+        <String>[absolute],
+      );
+    },
+  );
 }

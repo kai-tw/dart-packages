@@ -1,10 +1,11 @@
 name: dart_mutants
 description: >-
-  AST-based mutation testing for Dart and Flutter. Covers the constructs a
-  regex-based mutator cannot see at all — the ternary, a switch expression's
-  arms, null-coalescing — by walking the same analyzer AST dart_lints already
-  does, not by pattern-matching source text.
-version: 0.1.0
+  AST-based mutation testing for Dart and Flutter. Asks both whether an
+  expression's branch is pinned (ternary, switch arms, null-coalescing,
+  comparisons) and whether a line's effect is asserted at all (statement
+  deletion, condition negation), by walking the same analyzer AST dart_lints
+  already does rather than pattern-matching source text.
+version: 0.2.0
 repository: https://github.com/kai-tw/kai-packages/tree/main/packages/dart_mutants
 
 environment:

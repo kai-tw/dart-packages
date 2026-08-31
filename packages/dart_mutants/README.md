@@ -21,6 +21,12 @@ dart run dart_mutants --json --test-command "dart test" lib/foo.dart
 
 ## What it mutates
 
+The operators fall into two groups that ask different questions, and a pool
+holding only one group has a blind half rather than a smaller sample.
+
+**"Is this expression's branch or boundary pinned?"** — these presume the
+line runs and probe which way it went:
+
 - **`ternary_swap`** — `a ? b : c` -> `a ? c : b`.
 - **`switch_expression_arm_swap`** — one arm's result replaced with an
   adjacent arm's, patterns and guards untouched.
@@ -29,10 +35,22 @@ dart run dart_mutants --json --test-command "dart test" lib/foo.dart
 - **`relational_operator_replacement`** — `<`/`<=`/`>`/`>=`/`==`/`!=`
   replaced with a boundary-adjacent operator (not the full family — see the
   class doc on `RelationalOperatorReplacement` for why).
+- **`logical_operator_replacement`** — `&&` <-> `||`.
+- **`arithmetic_operator_replacement`** — `+` <-> `-`, `*` <-> `/`.
 
-`&&`/`||` are deliberately not reimplemented here — a regex-based mutator
-already covers them adequately; this package exists for the constructs one
-cannot.
+**"Does any test assert this line's effect happened at all?"** — these ask
+the prior question, and are the only ones that reach code containing no
+operator to mutate:
+
+- **`statement_deletion`** — one statement replaced with an empty `;`.
+- **`condition_negation`** — `if (x)` -> `if (!(x))`, for `if`/`while`/
+  `do-while` and collection-`if`. Skipped when the condition is already a
+  comparison, which `relational_operator_replacement` covers better.
+
+A guard like `if (mounted) { setState(...) }` contains no ternary, no `??`
+and no comparison, so only the second group reaches it at all. Without those,
+a file's whole conditional structure can go unmeasured while the score reads
+clean.
 
 ## The compile-safety gate
 
@@ -69,9 +87,9 @@ mutants out.
 
 ## The output contract
 
-These three are guaranteed, not incidental — a caller with its own
+These four are guaranteed, not incidental — a caller with its own
 pass/fail policy (a per-file threshold other than "zero undetected", for
-instance) depends on all three, and each is covered by a test against the
+instance) depends on all four, and each is covered by a test against the
 real CLI binary, not just the internal report types:
 
 - **`--json` always prints a complete report to stdout, even when the exit
@@ -87,6 +105,14 @@ real CLI binary, not just the internal report types:
   or `timeout` has a hollow-looking 100% the same way a file with only one
   real mutant does — comparing either against `total` is how a policy layer
   catches that, so both are reported, not just counted internally.
+- **A path comes back exactly as it was passed in.** Paths are echoed, never
+  normalised — pass `lib/foo.dart` and the report says `lib/foo.dart`; pass
+  it absolute and the report says it absolute. This matters more than it
+  looks, because `files` is *keyed* by that path: a caller checking that
+  every file it asked for came back has to compare the same form it sent, and
+  one that assumes either form will silently match nothing. Echoing is the
+  only behaviour that lets a caller use its own paths as lookup keys without
+  this package deciding what a path should look like.
 
 ## Known limitations
 
@@ -103,3 +129,26 @@ real CLI binary, not just the internal report types:
 - **Command splitting is whitespace-only.** `--test-command`/
   `--analyze-command` are split on whitespace; an argument that itself needs
   a literal space is not supported yet.
+- **Equivalent mutants are not detected.** `statement_deletion` can delete a
+  statement that provably changes nothing — a trailing bare `return;` in a
+  void function is the common one. Recognising those needs flow analysis this
+  package does not do, so they surface as survivors for a person to dismiss
+  rather than being filtered out on a guess. A caller gating on a percentage
+  should expect a small floor of these.
+- **A green baseline is not proof that tests ran.** The pre-flight check
+  confirms the test command exits 0 against unmodified code. It cannot
+  confirm the command actually *executed* anything — that would mean parsing
+  one specific runner's output, and this package deliberately accepts any
+  `--test-command`. The case is contained rather than prevented: a baseline
+  that runs nothing makes every mutant undetected, so the file scores 0% and
+  this binary exits 1. Wrong for the wrong reason, but it stops rather than
+  waving through. Reaching it takes a custom wrapper command, since `dart
+  test` (exit 79) and `flutter test` both refuse loudly on no tests.
+  A caller that wants this *named* rather than merely blocked should treat
+  "zero detected across every file" as ambiguous between "the suite asserts
+  nothing" and "the suite never ran". Those are indistinguishable from this
+  report, and this package does not guess between them.
+- **No per-project operator selection.** `defaultOperators()` is a flat list;
+  every operator runs on every file. A caller wanting to stage the deletion
+  and negation operators in gradually would be the reason to build a config
+  layer, which does not exist yet.
