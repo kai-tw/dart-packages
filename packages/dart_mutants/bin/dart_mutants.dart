@@ -142,5 +142,15 @@ void _printText(MutationRunReport report) {
         '${r.mutant.description}',
       );
     }
+    // Printed with the same weight as an undetected one. A timed-out mutant is
+    // real code that went unmeasured, and the count on the line above says so
+    // without saying which — so on its own it is a number nobody acts on.
+    for (final MutantResult r in f.timedOutMutants) {
+      stdout.writeln(
+        '  timed out (NOT scored): ${r.mutant.operatorName} at '
+        '${f.filePath}:${r.mutant.line}:${r.mutant.column} — '
+        '${r.mutant.description}',
+      );
+    }
   }
 }

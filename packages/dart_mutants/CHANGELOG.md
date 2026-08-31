@@ -1,3 +1,56 @@
+## 0.2.1
+
+`timedOutMutants` — a timed-out mutant is now reported with its identity, not
+just counted. Behaviour is unchanged: the timeout fires at the same second,
+the mutant is still killed, still scored `timeout`, still excluded from
+`total`. Only the report gained something.
+
+The count alone was unactionable, and two consuming sessions hit that in one
+day. `timedOut: 1` says something went unmeasured without saying WHICH — so
+nobody can see the line, tell whether it is the same mutant every run, or go
+and look at it. The failure that motivated it: a file carried a mutant that
+timed out on EVERY round, was therefore never scored once, and stayed
+invisible behind a number no caller reads per-mutant. Its own file kept
+reporting a healthy-looking score.
+
+`FileMutationReport`'s doc used to claim that comparing `timedOut` against
+`total` is how that gets caught. That was half true — the comparison finds
+THAT, never WHICH — and this list is the other half.
+
+`invalid` deliberately gets no equivalent list, and the asymmetry is the
+point: an invalid mutant is not legal code and never needed measuring, while
+a timed-out one is real code that went unmeasured. Only the second is a gap.
+
+**A timeout moves the score in EITHER direction, and which one is unknowable
+without running the mutant.** It is excluded from the numerator and the
+denominator both, so:
+
+- had it been detected, excluding it **lowers** the score;
+- had it been undetected, excluding it **raises** it.
+
+Measured, on one file, both ends of that: at a 90s budget it reported FAIL 71%
+with one timeout; at 300s the same file reported FAIL 75% with none, because
+the mutant resolved to *detected* and rejoined the denominator. The reported
+71% was an under-count of a real 75%.
+
+That asymmetry is why the defect went unreported for so long: **an under-count
+reads as "write more tests" and nobody files it**, while the inflating
+direction is the one that silently passes a gate. Same mechanism, and only one
+of its two symptoms is uncomfortable enough to chase.
+
+**Raising `--mutant-timeout` is not a substitute for this list.** It works
+only when the timeout was a budget problem and disappears — then you can diff
+two runs and see which mutant flipped. Against a genuine non-terminating
+mutant it tells you nothing at any budget, and that is precisely the case
+where knowing which one matters most.
+
+Also fixes a flake in this package's own suite. The integration fixture ran
+with a 5s mutant timeout; alone it passed, inside the full suite the BASELINE
+run — the cold one, competing with every other test file — exceeded it and
+seven tests failed. Raised to 10s. A suite whose job is measuring whether
+other suites are trustworthy cannot be the flaky one. Total runtime went DOWN
+(52s to 26s): the failures were spending the full timeout before giving up.
+
 ## 0.2.0
 
 Four new operators, closing the half of the mutation space the initial

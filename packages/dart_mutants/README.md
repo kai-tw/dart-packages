@@ -105,6 +105,25 @@ real CLI binary, not just the internal report types:
   or `timeout` has a hollow-looking 100% the same way a file with only one
   real mutant does — comparing either against `total` is how a policy layer
   catches that, so both are reported, not just counted internally.
+- **A timed-out mutant is reported with its identity**, in
+  `timedOutMutants`, alongside the count. Comparing the count against `total`
+  tells a caller THAT something went unmeasured and never WHICH, so on its own
+  it is a number nobody can act on: you cannot see which line, whether it is
+  the same mutant every run, or go and look at it. Measured — a file carried a
+  mutant that timed out on *every* round, was therefore never scored once, and
+  stayed invisible behind that count. `invalid` deliberately gets no such
+  list: an invalid mutant is not legal code, so nothing went unmeasured that
+  anyone could inspect.
+
+  A timeout is excluded from the numerator *and* the denominator, so it moves
+  the score in **either** direction and you cannot tell which without running
+  the mutant: had it been detected, excluding it lowers the score; had it been
+  undetected, excluding it raises one. Measured on one file — 71% with a
+  timeout at a 90s budget, 75% with none at 300s, because the mutant resolved
+  to detected and rejoined the denominator. Raising the budget is not a
+  substitute for the list: it identifies the mutant only when the timeout
+  disappears, and tells you nothing at all about one that genuinely does not
+  terminate.
 - **A path comes back exactly as it was passed in.** Paths are echoed, never
   normalised — pass `lib/foo.dart` and the report says `lib/foo.dart`; pass
   it absolute and the report says it absolute. This matters more than it

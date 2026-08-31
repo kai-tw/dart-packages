@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:dart_mutants/src/runner/compile_safety_gate.dart';
 import 'package:dart_mutants/src/runner/file_mutation_report.dart';
+import 'package:dart_mutants/src/runner/mutant_result.dart';
+import 'package:dart_mutants/src/runner/mutant_verdict.dart';
 import 'package:dart_mutants/src/runner/mutation_run_report.dart';
 import 'package:dart_mutants/src/runner/mutation_test_runner.dart';
 import 'package:dart_mutants/src/runner/process_command.dart';
@@ -142,11 +144,21 @@ MutationTestRunner _runnerFor(Directory dir) => MutationTestRunner(
   compileSafetyGate: const CompileSafetyGate(
     ProcessCommand('dart', <String>['analyze']),
   ),
-  // Short on purpose: every mutant in this fixture except hangs.dart's
-  // finishes near-instantly, and that one is specifically designed to
-  // never finish at all — a long timeout would only make this suite slower
-  // without testing anything a short one does not already cover.
-  mutantTimeout: const Duration(seconds: 5),
+  // Short, but not as short as it wants to be. Every mutant in this fixture
+  // except hangs.dart's finishes near-instantly, and that one is designed
+  // never to finish at all, so the timeout only has to outlast a `dart test`
+  // cold start.
+  //
+  // It was 5s, and that made this file FLAKY: run alone it passed, run inside
+  // the full suite it failed with "the test command did not finish against
+  // unmodified code within the timeout" — the BASELINE run, not a mutant. The
+  // baseline is the cold one (nothing is warm yet) and it competes with every
+  // other test file the runner is executing in parallel, so 5s of headroom is
+  // a bet on machine load rather than a property of the fixture.
+  //
+  // Doubling costs ~5s on the one mutant that genuinely hangs. A suite that
+  // measures whether OTHER suites are trustworthy cannot be the flaky one.
+  mutantTimeout: const Duration(seconds: 10),
 );
 
 FileMutationReport _reportFor(MutationRunReport report, String name) =>
@@ -240,6 +252,42 @@ void main() {
         expect(f.undetected, 0);
         expect(f.invalid, 0);
         expect(f.total, 0, reason: 'timedOut is excluded from the score');
+      },
+    );
+
+    test(
+      '[boundary] a timed-out mutant is reported with its IDENTITY, not just '
+      'counted — a count says something went unmeasured without saying what, '
+      'so nobody can go and look at it',
+      () {
+        final FileMutationReport f = _reportFor(report, 'hangs.dart');
+
+        expect(f.timedOutMutants, hasLength(f.timedOut));
+        final MutantResult r = f.timedOutMutants.single;
+        expect(r.verdict, MutantVerdict.timeout);
+        expect(r.mutant.line, greaterThan(0));
+        expect(r.mutant.operatorName, 'ternary_swap');
+        expect(
+          r.mutant.description,
+          isNotEmpty,
+          reason:
+              'a caller has to be able to map this back to a source line; '
+              'measured, a mutant that timed out on EVERY round was therefore '
+              'never scored once and stayed invisible behind the count',
+        );
+      },
+    );
+
+    test(
+      '[boundary] `invalid` deliberately gets no such list — an invalid '
+      'mutant is not legal code, so there is nothing to go and look at',
+      () {
+        final FileMutationReport f = _reportFor(report, 'invalid.dart');
+
+        expect(f.invalid, 1);
+        // The asymmetry is the point: only mutants that were REAL CODE and
+        // went unmeasured earn an identity list.
+        expect(f.timedOutMutants, isEmpty);
       },
     );
 

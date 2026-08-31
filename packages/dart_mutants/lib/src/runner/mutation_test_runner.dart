@@ -103,6 +103,7 @@ class MutationTestRunner {
     int invalid = 0;
     int timedOut = 0;
     final List<MutantResult> undetectedResults = <MutantResult>[];
+    final List<MutantResult> timedOutResults = <MutantResult>[];
 
     for (final Mutant mutant in mutants) {
       final MutantVerdict verdict = await _runOne(mutant, originalSource);
@@ -111,6 +112,13 @@ class MutationTestRunner {
           invalid++;
         case MutantVerdict.timeout:
           timedOut++;
+          // Kept, not just counted. A timed-out mutant is real code that went
+          // unmeasured, and a caller who only gets the number cannot tell
+          // WHICH line, whether it is the same one across runs, or go and look
+          // at it. Measured: a mutant that timed out on every round of a file
+          // was therefore never scored at all — permanently invisible behind a
+          // count nobody reads per-mutant.
+          timedOutResults.add(MutantResult(mutant: mutant, verdict: verdict));
         case MutantVerdict.detected:
           detected++;
         case MutantVerdict.undetected:
@@ -128,6 +136,7 @@ class MutationTestRunner {
       invalid: invalid,
       timedOut: timedOut,
       undetectedMutants: undetectedResults,
+      timedOutMutants: timedOutResults,
     );
   }
 
