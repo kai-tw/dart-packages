@@ -1,0 +1,33 @@
+name: image_codec
+description: >-
+  Reads facts out of image bytes and turns image bytes into other image bytes,
+  behind one exception type. Wraps the engine's header reader, package:image and
+  flutter_image_compress so a consumer never has to know which of the three
+  failed, or that they fail in three different shapes.
+version: 0.1.0
+repository: https://github.com/kai-tw/kai-packages/tree/main/packages/image_codec
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+  flutter: '>=3.3.0'
+
+resolution: workspace
+
+dependencies:
+  equatable: ^2.0.5
+  flutter:
+    sdk: flutter
+  flutter_image_compress: ^2.4.0
+  image: ^4.5.0
+  meta: ^1.15.0
+
+dev_dependencies:
+  # A workspace path dependency, not a git tag: inside this repo the engine
+  # under test IS the working tree. Consuming apps pin `dart_mutants` by tag
+  # instead, because for them it is a released tool rather than a sibling.
+  dart_mutants:
+    path: ../dart_mutants
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter

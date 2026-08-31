@@ -12,6 +12,7 @@ workspace:
   - packages/dart_lints
   - packages/dart_mutants
   - packages/hybrid_logical_clock
+  - packages/image_codec
   - packages/log_system
   - packages/preference_store
   - packages/ui_kit

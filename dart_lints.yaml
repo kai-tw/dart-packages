@@ -28,6 +28,31 @@ coverageIgnore: []
 bundles: [core, flutter]
 
 areas:
+  # Declared BEFORE `production` on purpose: a file matching more than one area
+  # belongs to the FIRST one declared, so this narrow entry has to win the
+  # overlap with `packages/*/lib/**` below.
+  #
+  # ONE file, and it must stay one file. The exemption is exactly as wide as
+  # this glob, so moving an engine call into a second file would silently widen
+  # a lint exemption rather than reorganise code.
+  #
+  # Why it cannot be satisfied instead of exempted: every `dart:ui` native call
+  # routes failure through one generic bridge (`_futurize` in the engine's
+  # `painting.dart`) that hardcodes `throw Exception('operation failed')`.
+  # There is no narrower type in existence to catch, and no predicate to ask
+  # beforehand — the condition cannot be detected without attempting it. The
+  # rule's premise ("a narrower type exists") is false at this boundary and
+  # only at this boundary.
+  #
+  # `avoid_catching_object` and `avoid_catching_error` are deliberately NOT
+  # disabled here. The one Error-side failure this package handles
+  # (`CompressError`, from flutter_image_compress) is caught by name, which the
+  # error rule already permits — it matches a fixed list of `dart:core` types.
+  image_codec_engine_boundary:
+    paths:
+      - "packages/image_codec/lib/src/engine_image_boundary.dart"
+    disable:
+      - avoid_catching_base_exception
   production:
     paths:
       - "packages/*/lib/**"

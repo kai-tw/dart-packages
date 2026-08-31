@@ -1,0 +1,116 @@
+# image_codec
+
+Reads facts out of image bytes, and turns image bytes into other image bytes —
+behind one exception type.
+
+Bytes in, bytes out. A consumer never picks a decoding library, never imports
+one, and never learns that three of them fail in three different shapes.
+
+```dart
+final ImageSize? size = await ImageCodec.readImageSize(bytes);
+final bool whole = await ImageCodec.isPixelDataComplete(bytes);
+final Uint8List webp = await ImageCodec.encodeWebp(bytes);   // Android/iOS
+```
+
+## Two questions that look like one
+
+Reading a header and decoding pixels are different operations, and the gap
+between them is the reason this package exists:
+
+- **`readImageSize`** asks the engine what the header *declares*. It never
+  materialises the bitmap, so it is fast — and it reports a truncated file's
+  dimensions perfectly happily, because nothing ever walks past the header.
+- **`isPixelDataComplete`** decodes to a 1x1 target. That walks far enough into
+  the stream to fail on a truncated or corrupt body, at the cost of one pixel
+  rather than the whole image.
+
+A truncated file returns dimensions from the first and `false` from the second.
+Code that needs "is this a real, whole image" and asks only the first has a
+hole.
+
+## The unified exception
+
+Three libraries sit underneath, failing in three shapes across **two** type
+hierarchies:
+
+| Source | What it throws |
+|---|---|
+| the Flutter engine (`dart:ui`) | a bare `Exception`, no subtype — every native call routes failure through one `_futurize` bridge that hardcodes it |
+| `package:image` | `ImageException implements Exception` |
+| `flutter_image_compress` | `CompressError extends **Error**` |
+
+A caller catches `ImageCodecException` and nothing else.
+
+**Reads do not throw at all.** "These bytes are not an image" is an ordinary
+answer for a cover a user picked or an image pulled out of an EPUB, so
+`readImageSize` returns `null`, `isPixelDataComplete` returns `false`, and
+`decodeImageSizes` omits the entry. Only the encode path throws.
+
+## Root isolate only
+
+Every read goes through the engine, and the engine's decoder registry is
+reachable only from the root isolate. From a spawned isolate these calls do not
+raise a clear error — the decode fails, and this package reports that as "not a
+readable image". **A perfectly good image comes back `null`.**
+
+That is the one silent failure mode here. If you are replacing a pure-Dart
+header parser with this package, check every call site for `Isolate.spawn` /
+`compute()` first: the code being replaced was isolate-safe and this is not, so
+a call that reads as unchanged has changed meaning. A comment claiming
+"isolate-safe" beside such a call is describing the old implementation.
+
+## `decodeImageSizes` omits; it does not degrade
+
+An entry whose dimensions cannot be read is **left out of the result map**. A
+missing key means the consumer drops that image entirely, not that it renders
+without dimensions.
+
+If you build output by iterating the result map, an unreadable input **silently
+vanishes**. To degrade instead of dropping, iterate your own input keys and look
+each one up.
+
+## `encodeWebp` is Android and iOS only, and it resizes
+
+`flutter_image_compress` hard-gates WebP to those two platforms and throws
+`UnsupportedError` elsewhere; with no platform implementation registered — the
+state of every plain `flutter test` — its stub throws `UnimplementedError`. Both
+are `Error` subtypes, which this repo's `avoid_catching_error` forbids catching,
+so this package **checks the platform before calling** rather than catching
+after. On any other platform you get an `ImageEncodeException`, not a raw
+`Error`.
+
+It also **resizes large sources**. `maxWidth`/`maxHeight` default to 1920x1080
+and bound the output from above, so a 4032x3024 photo comes back 1920x1440.
+`readImageSize` before and after will differ whenever the source exceeds the
+bounds — that is the contract. Pass your own bounds to change it.
+
+## What this is not
+
+- Not image **rendering or display** — this produces bytes and facts; painting
+  them is the consumer's.
+- Not **where converted bytes land** — storage and cache placement are policy,
+  and policy lives one layer up.
+- Not a **decode ceiling** — deciding how many pixels an image needs on screen
+  requires a widget's constraints, which a package cannot see.
+
+## Known limitations
+
+- **`encodeWebp` has no unit-test coverage of a successful encode.** The
+  compressor cannot run under `flutter test` at all (no registered platform
+  implementation), so the success path needs `integration_test/` on a real
+  device. What the suite does pin is that failure arrives as
+  `ImageCodecException` rather than as one of the three underlying shapes.
+- **The passthrough cannot detect a wrong-but-plausible native decode.** Its
+  output is verified by reading the dimensions back, which catches "not an image
+  at all" but not correct-sized-wrong-pixels. Establishing that needs a real
+  device.
+- **`ImageDecodeException` currently has no thrower.** It is exported for the
+  decode failures the encode path reports, which today all surface as
+  `ImageEncodeException`.
+- **One engine handle's release is unpinnable.** Three of the four `dispose()`
+  calls in the boundary have tests that go red when the call is deleted;
+  `ui.ImmutableBuffer.dispose()` does not, because `ImmutableBuffer` is a
+  `base class` and the language forbids implementing it outside its own
+  library. Mutation testing reports that deletion as a surviving mutant
+  permanently — it is a known gap with a named cause, not an oversight, and
+  not an equivalent mutant either: deleting it really does leak.

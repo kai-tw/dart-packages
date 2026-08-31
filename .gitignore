@@ -12,3 +12,6 @@ doc/api/
 pubspec.lock
 
 .DS_Store
+
+# `flutter test --coverage` output. Regenerated on demand, never reviewed.
+coverage/
