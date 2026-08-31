@@ -85,10 +85,26 @@ so this package **checks the platform before calling** rather than catching
 after. On any other platform you get an `ImageEncodeException`, not a raw
 `Error`.
 
-It also **resizes large sources**. `maxWidth`/`maxHeight` default to 1920x1080
-and bound the output from above, so a 4032x3024 photo comes back 1920x1440.
-`readImageSize` before and after will differ whenever the source exceeds the
-bounds — that is the contract. Pass your own bounds to change it.
+It also **resizes large sources**, and the parameter names mean the opposite of
+what most people read them as. `minWidth`/`minHeight` (default 1920x1080) are a
+**floor on the result, not a ceiling**:
+
+```
+scale  = max(1.0, min(srcW / minWidth, srcH / minHeight))
+result = src / scale
+```
+
+The image shrinks by the smallest factor that brings **one** axis to its limit;
+the other lands above its own. A 4032x3024 photo comes back **1920x1440** —
+width exactly 1920, height 360px over the 1080 "limit". Both axes end up at or
+above their minimum, which is what `min` means here.
+
+`minHeight: 2000` does **not** cap the height at 2000. It guarantees the result
+is at least 2000 tall. Nothing is ever scaled up — the `max(1.0, …)` clamp
+means a source already under both limits passes through untouched.
+
+The names are upstream's on purpose: they are correct, and a second vocabulary
+here would only put distance between you and the plugin's own FAQ.
 
 ## What this is not
 

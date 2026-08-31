@@ -40,11 +40,12 @@ recording because it shaped the design:
   on truncated input is prevented the same way: `isPixelDataComplete` gates the
   fallback, so the decoder is never handed bytes that trigger them.
 
-**`encodeWebp` resizes.** `flutter_image_compress`'s `minWidth`/`minHeight` are
-named misleadingly — they bound the output from above — so the plugin's
-defaults silently shrink a 4032x3024 photo to 1920x1440. They are now explicit
-`maxWidth`/`maxHeight` parameters, documented as a transform the caller owns
-rather than a default they never saw.
+**`encodeWebp` resizes**, and the parameters are a FLOOR on the result rather
+than a ceiling: the image shrinks by the smallest factor that brings one axis
+to its limit, so 4032x3024 at the defaults comes back 1920x1440 — height 360px
+*above* the 1080 limit. `flutter_image_compress`'s `minWidth`/`minHeight` names
+are therefore correct, and are passed through unchanged rather than renamed;
+the defaults are stated explicitly at the call site so the transform is visible.
 
 **Reads are root-isolate only**, and this is the one silent failure mode: from
 a spawned isolate the engine's decoder registry is unreachable, the decode

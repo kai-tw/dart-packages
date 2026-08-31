@@ -66,9 +66,19 @@ abstract final class ImageCodec {
   /// caller that wants degrade-not-drop must iterate its own input and look up
   /// each key here.
   ///
-  /// Reads run on the calling isolate: the engine's decoder registry is only
-  /// reachable from the root isolate, and a header read does not occupy the
-  /// event loop long enough for a `compute()` hop to buy anything.
+  /// **This is a plain sequential loop on the calling isolate, and it cannot
+  /// be anything else.** The engine's decoder registry is root-isolate-only,
+  /// so a `compute()` hop is not available to this implementation at any
+  /// price — a batch of N images is N async engine round-trips on the thread
+  /// that paints, each copying its bytes into an `ImmutableBuffer`.
+  ///
+  /// A caller replacing a pure-Dart reader that DID run inside `compute()` is
+  /// therefore moving that work back onto the UI thread. Per-image cost is
+  /// small; a chapter's worth of images or a full catalogue page of covers is
+  /// not obviously small, and this package cannot bound it for you. Measure it
+  /// on the largest batch you actually pass, and if it does not fit, the
+  /// answer is to chunk or defer the calls at your end — not to look for a
+  /// setting here.
   static Future<Map<String, ImageSize>> decodeImageSizes(
     Map<String, Uint8List> images,
   ) async {

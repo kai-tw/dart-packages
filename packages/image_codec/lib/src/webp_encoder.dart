@@ -37,12 +37,25 @@ abstract final class WebpEncoder {
   /// this package's own [ImageEncodeException] without a catch clause anywhere.
   ///
   /// **Silently resizes when the source is large.** The compressor's
-  /// `minWidth`/`minHeight` are misleadingly named: they are an upper bound, so
-  /// a 4032x3024 photo comes back 1920x1440 at the plugin's defaults. Those
-  /// bounds are passed explicitly here from [maxWidth]/[maxHeight] so the
-  /// transform is the caller's decision rather than a default they never saw.
-  /// `readImageSize` before and after will differ whenever the source exceeds
-  /// them — that is the contract, not a bug.
+  /// [minWidth]/[minHeight] are a FLOOR on the result, not a ceiling, and the
+  /// name is upstream's because the name is correct. The image is scaled DOWN
+  /// by the smallest factor that brings one axis to its limit, and the other
+  /// axis then lands above its own:
+  ///
+  ///     scale  = max(1.0, min(srcW / minWidth, srcH / minHeight))
+  ///     result = src / scale
+  ///
+  /// So 4032x3024 at the defaults comes back **1920x1440** — width exactly at
+  /// the limit, height 360px above it. Both axes end up >= their minimum,
+  /// which is what "min" means here. Passing `minHeight: 2000` does NOT cap
+  /// the height at 2000; it guarantees the result is at least 2000 tall.
+  ///
+  /// Nothing is ever scaled up: `max(1.0, …)` clamps the factor, so a source
+  /// already smaller than both limits passes through untouched.
+  ///
+  /// They are passed explicitly rather than defaulted so the transform is a
+  /// decision the caller can see. `readImageSize` before and after will differ
+  /// whenever the source exceeds them — that is the contract, not a bug.
   ///
   /// The passthrough hands the source bytes straight to the native compressor,
   /// skipping a decode and a PNG re-encode when the platform already reads that
@@ -57,8 +70,8 @@ abstract final class WebpEncoder {
   static Future<Uint8List> encodeWebp(
     Uint8List bytes, {
     int quality = 85,
-    int maxWidth = 1920,
-    int maxHeight = 1080,
+    int minWidth = 1920,
+    int minHeight = 1080,
   }) async {
     if (bytes.isEmpty) {
       throw const ImageEncodeException('cannot encode empty bytes');
@@ -72,13 +85,13 @@ abstract final class WebpEncoder {
     final Uint8List? direct = await _compressOrNull(
       bytes,
       quality,
-      maxWidth,
-      maxHeight,
+      minWidth,
+      minHeight,
     );
     if (direct != null && await ImageCodec.readImageSize(direct) != null) {
       return direct;
     }
-    return _reEncodeViaPng(bytes, quality, maxWidth, maxHeight);
+    return _reEncodeViaPng(bytes, quality, minWidth, minHeight);
   }
 
   /// Compresses [bytes] to WebP, or `null` when the compressor rejects them.
@@ -93,21 +106,21 @@ abstract final class WebpEncoder {
   static Future<Uint8List?> _compressOrNull(
     Uint8List bytes,
     int quality,
-    int maxWidth,
-    int maxHeight,
+    int minWidth,
+    int minHeight,
   ) async {
     try {
       return await FlutterImageCompress.compressWithList(
         bytes,
         format: CompressFormat.webp,
         quality: quality,
-        // Named `min*` by the plugin, but they bound the output from ABOVE —
-        // its own FAQ is titled "why is minWidth/minHeight named that if it
-        // acts like a max". Passed explicitly rather than defaulted so the
-        // resize is a decision this package made on the caller's behalf and
-        // documented, not one the plugin made silently.
-        minWidth: maxWidth,
-        minHeight: maxHeight,
+        // Passed through under the plugin's own names, deliberately: they are
+        // a floor on the result, the plugin is right to call them `min*`, and
+        // renaming them here would put a second vocabulary between a caller
+        // and the FAQ that explains the behaviour. Explicit rather than
+        // defaulted so the resize is visible at this call site.
+        minWidth: minWidth,
+        minHeight: minHeight,
       );
     } on CompressError {
       // Caught by name, and legal: `CompressError` extends `Error` but is not
@@ -136,8 +149,8 @@ abstract final class WebpEncoder {
   static Future<Uint8List> _compressOrThrow(
     Uint8List bytes,
     int quality,
-    int maxWidth,
-    int maxHeight,
+    int minWidth,
+    int minHeight,
     String failureMessage,
   ) async {
     try {
@@ -145,8 +158,8 @@ abstract final class WebpEncoder {
         bytes,
         format: CompressFormat.webp,
         quality: quality,
-        minWidth: maxWidth,
-        minHeight: maxHeight,
+        minWidth: minWidth,
+        minHeight: minHeight,
       );
     } on CompressError catch (e) {
       throw ImageEncodeException(failureMessage, cause: e);
@@ -176,8 +189,8 @@ abstract final class WebpEncoder {
   static Future<Uint8List> _reEncodeViaPng(
     Uint8List bytes,
     int quality,
-    int maxWidth,
-    int maxHeight,
+    int minWidth,
+    int minHeight,
   ) async {
     if (!await ImageCodec.isPixelDataComplete(bytes)) {
       throw const ImageEncodeException(
@@ -197,8 +210,8 @@ abstract final class WebpEncoder {
     return _compressOrThrow(
       png,
       quality,
-      maxWidth,
-      maxHeight,
+      minWidth,
+      minHeight,
       're-encoding to WebP failed even after decoding through PNG',
     );
   }
