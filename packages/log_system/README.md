@@ -19,11 +19,20 @@ LogSystem.error('sync: round failed', error: e, stackTrace: s);
 LogSystem.fatal('db: unreadable', error: e, stackTrace: s);
 ```
 
-That is deliberately all of it. The repository, the sinks and the redactor are
-unexported: they are the reason this package exists rather than a snippet, but
-a caller who has to assemble them is a caller who can assemble them *wrong* —
-and getting the crash-reporter egress wrong is the failure it was extracted to
-prevent. Configuration is flags, not objects.
+Plus one seam an app may implement — a `LogSink`, its own destination, which
+is also how its own tests see that a fault was logged. See
+[Registering your own destination](#registering-your-own-destination).
+
+The repository, the data sources and the redactor stay unexported: they are the
+reason this package exists rather than a snippet, but a caller who has to
+assemble them is a caller who can assemble them *wrong* — and getting the
+crash-reporter egress wrong is the failure it was extracted to prevent.
+Configuration is flags, not objects.
+
+A `LogSink` is not an exception to that. It is a destination rather than a
+collaborator in the graph, and what it receives has **already** crossed the
+redaction boundary. Observing the egress and being able to widen it are
+different powers, and only the second was ever what got withheld.
 
 **Logging before `init` is a silent no-op.** Unit tests that construct
 production types directly never stand up the app's wiring, and a log line must
@@ -77,12 +86,13 @@ this one. See the framework-fatal section below.
 
 ## Severity routing
 
-| level | console | crash reporter |
-|---|---|---|
-| `debug` | yes, and never in release | never |
-| `info` | yes | breadcrumb |
-| `warning` | yes | breadcrumb — never a fault entry |
-| `error` / `fatal` | yes | `recordError`, non-fatal / fatal |
+| level | console | crash reporter | host sink |
+|---|---|---|---|
+| `debug` | yes, and never in release | never | yes |
+| `info` | yes | breadcrumb | yes |
+| `warning` | yes | breadcrumb — never a fault entry | yes |
+| `error` / `fatal` | yes | `recordError`, non-fatal / fatal | yes |
+| `event` | yes | never | yes |
 
 A breadcrumb is not a fault entry — it surfaces only alongside a later crash.
 `info` and `warning` both produce one, and there is no flag to turn that off.
@@ -119,6 +129,76 @@ dependency of everyone, so an app that wants a distinction preserved should
 translate at its own boundary into a domain type whose **name** carries it:
 `CloudOfflineException` reads better in a crash report than
 `SocketException errno=61` anyway.
+
+## Registering your own destination
+
+```dart
+final class FakeLogSink implements LogSink {
+  final List<LogEntry> entries = <LogEntry>[];
+
+  @override
+  void emit(LogEntry entry) => entries.add(entry);
+}
+```
+
+Four lines, and this package ships none of them on purpose: a test double
+belongs to the suite that asserts on it. Shipping one would put its shape —
+what it records, how a matcher reads it — in this package's public API, where
+changing it becomes a breaking change for every consumer.
+
+**In production**, pass it to `init` and it is wired *alongside* the console
+and the crash reporter, never instead of them. An app routing logging into a
+backend of its own does not thereby give up crash reporting.
+
+```dart
+LogSystem.init(sink: MyBackendSink());
+```
+
+**In a test**, build a sink-only instance and register it:
+
+```dart
+setUp(() => LogSystem.register(LogSystem.withSink(sink)));
+tearDown(LogSystem.reset);
+```
+
+`withSink` forwards to the sink alone — no console, no reporter. It exists
+because `init` is the wrong thing to call from a `setUp` whatever it is passed:
+it reads the Firebase registry, reassigns `PlatformDispatcher.instance.onError`
+process-wide, and logs a warning of its own. The `tearDown` is not optional —
+without it one test's sink goes on recording into every later test in the same
+process.
+
+### A sink sees every level, and sees them redacted
+
+Every level, including the two the crash reporter never receives. `debug` and
+`event` are exactly the ones an app could not otherwise observe anywhere, and
+a sink that inherited the reporter's column would show an app only the half of
+its logging that was never in question. What reaches a sink is bounded by
+redaction instead of by level.
+
+`LogEntry.redactedError` is a `String?`, and it is what the crash reporter
+would receive: a type name plus at most one closed-vocabulary structural field.
+The raw object never arrives. A sink handed the original would be a way around
+the redaction boundary — reintroduced by the very feature meant to make logging
+observable — so the door is shut here rather than left to each host's
+discretion.
+
+The cost is real and it is the intended incentive. A test asserting *which*
+failure was logged can only tell apart what the redactor can tell apart: the
+exception's type and its `diagnosticCode`. A test that cannot distinguish two
+failures is describing a pair of exceptions the crash reporter cannot
+distinguish either — **split the type**, rather than wanting this field
+widened.
+
+`message`, `stackTrace` and an event's `parameters` pass through as-is, exactly
+as they do to the reporter. The message discipline in the routing section
+applies here for the same reason.
+
+**A sink that throws does not break the call site.** The throw is captured into
+the same discarded future a failing internal sink rejects, so it surfaces to a
+zone handler rather than propagating out of `LogSystem.error(...)`. A sink is
+app code this package does not control, and a log line must never be why the
+line after it does not run.
 
 ## The two uncaught-error handlers
 

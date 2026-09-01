@@ -7,13 +7,43 @@ import 'data/adapters/log_error_redactor.dart';
 import 'data/adapters/logger_adapter.dart';
 import 'data/log_repository_impl.dart';
 import 'domain/log_repository.dart';
+import 'domain/log_sink.dart';
 
 /// The whole public surface of this package.
 ///
-/// Every level below is a silent no-op until [init] wires it — see [init]
-/// for the startup contract.
+/// Every level below is a silent no-op until something is registered — see
+/// [init] for the startup contract, and [LogSink] for the seam a host app
+/// implements when it wants its own destination, or wants its own tests to
+/// see that a fault was logged.
+///
+/// **An instance exists to be registered, not to be called.** [LogSystem.withSink]
+/// builds one and [register] installs it; the call surface is the statics
+/// below. That is not a style preference — a static and an instance member
+/// cannot share a name in Dart, so `LogSystem.error` being the static one is
+/// what lets every existing call site keep working unchanged. An app wanting
+/// an injectable logger injects its own [LogSink], not this.
+///
+/// **This package ships no fake sink.** A test double belongs to the suite
+/// that asserts on it: shipping one would put its shape — what it records,
+/// how a matcher reads it — in this package's public API, where changing it
+/// becomes a breaking change for every consumer. The [LogSink] doc has the
+/// four-line implementation to copy.
 class LogSystem {
-  LogSystem(this._repository);
+  LogSystem._(this._repository);
+
+  /// An instance that forwards every level to [sink] and to nothing else —
+  /// no console, no crash reporter. Install it with [register].
+  ///
+  /// This is the shape a test wants. [init] is the production path and is
+  /// wrong for a test whatever it is passed: it reads the Firebase registry,
+  /// reassigns `PlatformDispatcher.instance.onError` (a process-wide global,
+  /// from a `setUp`), and logs a warning of its own. None of that is what a
+  /// suite asking "was this failure logged?" wants standing behind it.
+  ///
+  /// An app wanting its own backend *alongside* the console and the reporter
+  /// passes `sink:` to [init] instead.
+  factory LogSystem.withSink(LogSink sink) =>
+      LogSystem._(LogRepositoryImpl(sink: sink));
 
   final LogRepository _repository;
 
@@ -121,6 +151,13 @@ class LogSystem {
     /// app's own exceptions should extend `LoggableException` instead of
     /// going through here.
     String? Function(Object error)? describeExtra,
+
+    /// The app's own destination, wired **alongside** the console and the
+    /// crash reporter rather than instead of them, and receiving every level
+    /// — including `debug` and `event`, which the reporter never sees. It is
+    /// handed values that have already crossed the redaction boundary; see
+    /// [LogSink].
+    LogSink? sink,
   }) {
     LogErrorRedactor.describeExtra = describeExtra;
 
@@ -128,9 +165,10 @@ class LogSystem {
     // `initializeApp()` — it answers with an empty list rather than throwing.
     final bool hasFirebase = Firebase.apps.isNotEmpty;
 
-    _instance = LogSystem(
+    _instance = LogSystem._(
       LogRepositoryImpl(
         console: LoggerAdapter(),
+        sink: sink,
         // Built even when it will send nothing, because building it is what
         // switches collection **off** at the SDK. Skipping it on
         // `reportCrashes: false` would leave the SDK default — on — and the
@@ -217,15 +255,37 @@ class LogSystem {
   /// Wires a repository directly, for **this package's own tests**.
   ///
   /// Not a seam for host apps, and structurally cannot be: [LogRepository] is
-  /// unexported, so nothing outside can name the argument. An app that wants
-  /// its logging quiet under test simply does not call [init] — every level is
-  /// a no-op until it does.
+  /// unexported, so nothing outside can name the argument. It survives
+  /// alongside [register] because the two observe different things — this one
+  /// reaches the routing table, which is what the tests in this package are
+  /// about, while a [LogSink] deliberately cannot see which destination a
+  /// level reached.
   @visibleForTesting
   static void initWithRepositoryForTest(LogRepository repository) =>
-      _instance = LogSystem(repository);
+      _instance = LogSystem._(repository);
 
-  /// Drops the wiring. Test seam — production code never calls it.
-  @visibleForTesting
+  /// Installs [system] as what every static below resolves through,
+  /// replacing whatever was there.
+  ///
+  /// Separate from [LogSystem.withSink] because building an instance and
+  /// making it global are two different acts, and only the second is the one
+  /// a `tearDown` has to undo:
+  ///
+  /// ```dart
+  /// setUp(() => LogSystem.register(LogSystem.withSink(sink)));
+  /// tearDown(LogSystem.reset);
+  /// ```
+  ///
+  /// Skipping the [reset] leaks one test's sink into every later test in the
+  /// same process, where it goes on recording lines nobody is asserting on.
+  static void register(LogSystem system) => _instance = system;
+
+  /// Drops the wiring, returning every level to the silent no-op it is before
+  /// anything is registered.
+  ///
+  /// Public because [register] made it half of a contract a host app has to
+  /// hold up, rather than only this package's own test seam — which it was
+  /// first, and is why it also clears the redactor's host describer.
   static void reset() {
     _instance = null;
     LogErrorRedactor.describeExtra = null;

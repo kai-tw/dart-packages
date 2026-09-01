@@ -1,6 +1,6 @@
 name: log_system
 description: Structured logging with a redacted crash-reporting egress, shared across my Flutter projects.
-version: 0.3.3
+version: 0.4.0
 repository: https://github.com/kai-tw/kai-packages/tree/main/packages/log_system
 
 environment:
@@ -16,6 +16,11 @@ dependencies:
   logger: ^2.6.2
 
 dev_dependencies:
+  # A workspace path dependency, not a git tag: inside this repo the tool
+  # under test IS the working tree. Consuming apps pin `dart_mutants` by tag
+  # instead, because for them it is a released tool rather than a sibling.
+  dart_mutants:
+    path: ../dart_mutants
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
