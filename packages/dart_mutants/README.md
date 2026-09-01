@@ -156,10 +156,13 @@ real CLI binary, not just the internal report types:
   undetected, excluding it raises one. Both measured, on two files of one
   consuming PR — 71% with a timeout at a 90s budget against 75% with none at
   300s (the mutant resolved to detected and rejoined the denominator), and, in
-  the direction that actually ships, a file reading **PASS 100% with two of
-  its three mutants timed out** at the 30s default, which reported FAIL 33% at
-  90s once all three scored. A percentage computed from one surviving mutant
-  is not a percentage. Raising the budget is not a
+  the direction that shipped, a file reading **PASS 100% with two of its three
+  mutants timed out** at the 30s default, which reported FAIL 33% at 90s once
+  all three scored. A percentage computed from one surviving mutant is not a
+  percentage — and catching that is a policy layer's job, not this one's: it
+  is the caller who knows what threshold it is gating on and can therefore
+  tell that a thin denominator has not measured anything. Raising the budget
+  is not a
   substitute for the list: it identifies the mutant only when the timeout
   disappears, and tells you nothing at all about one that genuinely does not
   terminate.

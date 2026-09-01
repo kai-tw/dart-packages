@@ -1,3 +1,32 @@
+## 0.2.4
+
+Docs only; no behaviour change, and **no change to the engine version
+`plan-mutation` requires** — its floor is 0.2.3 and stays there.
+
+The 0.2.1 entry claimed "a gate was passed by a file whose tests killed one
+mutant in three". That was wrong, and it was wrong when it was written rather
+than overtaken by a later fix: `plan-mutation` already scored a timeout both
+ways (worst — all survive; best — all kill), already called the verdict
+`undetermined` when the threshold fell between them, and already exited
+non-zero on the resulting LOW-SIGNAL row.
+
+How it got written is worth keeping, because it is the failure mode that entry
+is *about*. The wrapper had been read — for its report handling — and the exit
+code was simply never looked at. The claim was reasoned from this engine's
+number straight to a consequence in a layer this package does not own, in a
+file already open.
+
+What actually happened, from that layer's own record: the row was **labelled
+correctly** and shipped anyway, because the label was prose and only an exit
+code is enforcement. The label was never the defect.
+
+So the entry now says the escape is closed, and says the part that did not
+change: **the number this engine reports is still wrong in exactly the same
+way.** Catching a thin denominator is a policy layer's job, because only the
+caller knows what threshold it is gating on — this package deliberately makes
+no pass/fail judgement, and that division is the reason the correction reads
+as better layering rather than a smaller defect.
+
 ## 0.2.3
 
 **A timed-out mutant no longer leaks a runaway test process.** This is the
@@ -70,9 +99,10 @@ by looking measured.
 The missing half is now in that entry, from the same consuming PR: a file that
 reported PASS 100% at the 30s default with TWO OF ITS THREE mutants timed out,
 scoring 1/1 off the one that finished and was killed, and FAIL 33% at 90s once
-all three ran. That is the end that ships — nobody questioned the 100%, while
-the 71% got reported, which is the asymmetry the entry asserts happening to
-the entry itself.
+all three ran. That is the end that shipped — nobody questioned the 100%,
+while the 71% got reported, which is the asymmetry the entry asserts happening
+to the entry itself. (Present tense in this sentence was itself wrong; see
+0.2.4 — the policy layer blocks that row now, and did then.)
 
 Both ends are now attributed as two files of one PR rather than implied to be
 independent runs. The README's output-contract section carries the same
@@ -115,11 +145,20 @@ Both ends measured, on two different files of one consuming PR:
   at 300s the same file reported FAIL 75% with none, because the mutant
   resolved to *detected* and rejoined the denominator. The reported 71% was an
   under-count of a real 75%.
-- **Inflating, and this is the one that ships.** Another file reported
+- **Inflating, and this is the one that shipped.** Another file reported
   **PASS 100%** at the 30s default with *two of its three mutants timed out* —
-  the single mutant that finished had been killed, so the score was 1/1. At 90s,
-  with all three scored, the same file reported FAIL 33%. A gate was passed by
-  a file whose tests killed one mutant in three.
+  the single mutant that finished had been killed, so the score was 1/1. At
+  90s, with all three scored, the same file reported FAIL 33%.
+
+  It shipped because the policy layer labelled the row LOW-SIGNAL correctly
+  and then exited 0 on it, so the discipline lived only in prose. **That
+  escape is closed** — `plan-mutation` now scores a timeout both ways (worst:
+  all survive; best: all kill), calls the verdict `undetermined` when the
+  threshold falls between them, and exits non-zero on a LOW-SIGNAL row. The
+  number this engine reports is still wrong in exactly the same way; what
+  changed is that the layer whose job is pass/fail now catches it, which is
+  the correct division of labour — a thin denominator is a policy judgement,
+  and this package deliberately makes none.
 
 That asymmetry is why the defect went unreported for so long: **an under-count
 reads as "write more tests" and nobody files it**, while the inflating
