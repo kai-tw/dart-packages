@@ -1,3 +1,25 @@
+## 0.2.2
+
+Docs only; no behaviour change.
+
+The 0.2.1 entry below claimed "Measured, on one file, both ends of that" and
+then measured one end. The deflating case was real; the inflating one — a
+timeout excluded from the denominator raising a score — was reasoning in a
+measurement's clothes, in an entry whose whole subject is a defect that hides
+by looking measured.
+
+The missing half is now in that entry, from the same consuming PR: a file that
+reported PASS 100% at the 30s default with TWO OF ITS THREE mutants timed out,
+scoring 1/1 off the one that finished and was killed, and FAIL 33% at 90s once
+all three ran. That is the end that ships — nobody questioned the 100%, while
+the 71% got reported, which is the asymmetry the entry asserts happening to
+the entry itself.
+
+Both ends are now attributed as two files of one PR rather than implied to be
+independent runs. The README's output-contract section carries the same
+correction, plus the line the second case earns: a percentage computed from
+one surviving mutant is not a percentage.
+
 ## 0.2.1
 
 `timedOutMutants` — a timed-out mutant is now reported with its identity, not
