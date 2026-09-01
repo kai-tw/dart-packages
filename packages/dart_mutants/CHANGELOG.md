@@ -28,15 +28,23 @@ denominator both, so:
 - had it been detected, excluding it **lowers** the score;
 - had it been undetected, excluding it **raises** it.
 
-Measured, on one file, both ends of that: at a 90s budget it reported FAIL 71%
-with one timeout; at 300s the same file reported FAIL 75% with none, because
-the mutant resolved to *detected* and rejoined the denominator. The reported
-71% was an under-count of a real 75%.
+Both ends measured, on two different files of one consuming PR:
+
+- **Deflating.** At a 90s budget one file reported FAIL 71% with one timeout;
+  at 300s the same file reported FAIL 75% with none, because the mutant
+  resolved to *detected* and rejoined the denominator. The reported 71% was an
+  under-count of a real 75%.
+- **Inflating, and this is the one that ships.** Another file reported
+  **PASS 100%** at the 30s default with *two of its three mutants timed out* —
+  the single mutant that finished had been killed, so the score was 1/1. At 90s,
+  with all three scored, the same file reported FAIL 33%. A gate was passed by
+  a file whose tests killed one mutant in three.
 
 That asymmetry is why the defect went unreported for so long: **an under-count
 reads as "write more tests" and nobody files it**, while the inflating
 direction is the one that silently passes a gate. Same mechanism, and only one
-of its two symptoms is uncomfortable enough to chase.
+of its two symptoms is uncomfortable enough to chase — which is exactly why the
+100%-at-two-timeouts case sat unquestioned and the 71% got reported.
 
 **Raising `--mutant-timeout` is not a substitute for this list.** It works
 only when the timeout was a budget problem and disappears — then you can diff
