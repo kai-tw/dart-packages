@@ -59,26 +59,31 @@ class MutationTestRunner {
         .where((String path) => !isGeneratedFile(path))
         .toList();
 
-    final int? baselineExitCode = await testCommand.run(
-      timeout: mutantTimeout,
-    );
-    if (baselineExitCode == null) {
-      return const MutationRunReport.aborted(
-        'the test command did not finish against unmodified code within '
-        'the timeout — refusing to score mutants against a baseline that '
-        'never even completes',
-      );
-    }
-    if (baselineExitCode != 0) {
-      return MutationRunReport.aborted(
-        'the test command failed against unmodified code (exit '
-        '$baselineExitCode) — refusing to score mutants against a baseline '
-        'that was already red',
-      );
-    }
-
-    _registry.armSignalRestore();
+    // Armed before the baseline runs, not after. The baseline is a full test
+    // command like any other, so a Ctrl-C during it orphans a subprocess tree
+    // exactly the same way — and it is the longest single run of the session,
+    // being the cold one. There is nothing to restore yet at this point; the
+    // restore half is simply a no-op until the first mutant is written.
+    _registry.armSignalRestore(beforeExit: ProcessCommand.killAllRunning);
     try {
+      final int? baselineExitCode = await testCommand.run(
+        timeout: mutantTimeout,
+      );
+      if (baselineExitCode == null) {
+        return const MutationRunReport.aborted(
+          'the test command did not finish against unmodified code within '
+          'the timeout — refusing to score mutants against a baseline that '
+          'never even completes',
+        );
+      }
+      if (baselineExitCode != 0) {
+        return MutationRunReport.aborted(
+          'the test command failed against unmodified code (exit '
+          '$baselineExitCode) — refusing to score mutants against a baseline '
+          'that was already red',
+        );
+      }
+
       final List<FileMutationReport> fileReports = <FileMutationReport>[];
       for (final String filePath in targets) {
         fileReports.add(await _runFile(filePath));

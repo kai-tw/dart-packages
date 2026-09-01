@@ -54,7 +54,9 @@ void main() {
     'get',
   ], workingDirectory: dir.path);
   if (pubGet.exitCode != 0) {
-    throw StateError('dart pub get failed:\n${pubGet.stdout}\n${pubGet.stderr}');
+    throw StateError(
+      'dart pub get failed:\n${pubGet.stdout}\n${pubGet.stderr}',
+    );
   }
   return dir;
 }
@@ -71,6 +73,46 @@ Future<void> _waitUntil(
     await Future<void>.delayed(const Duration(milliseconds: 100));
   }
 }
+
+/// Walks `ps` independently of the implementation under test. Deliberately a
+/// second copy rather than reaching into `ProcessCommand`'s own walk: a test
+/// that enumerates processes the same way the code does would agree with it
+/// even when both are wrong.
+List<int> _descendantsOf(int rootPid) {
+  final Map<int, List<int>> childrenOf = <int, List<int>>{};
+  final String table =
+      Process.runSync('ps', <String>['-Ao', 'pid=,ppid=']).stdout as String;
+  for (final String line in table.split('\n')) {
+    final List<String> fields = line.trim().split(RegExp(r'\s+'));
+    if (fields.length < 2) {
+      continue;
+    }
+    final int? pid = int.tryParse(fields[0]);
+    final int? ppid = int.tryParse(fields[1]);
+    if (pid != null && ppid != null) {
+      childrenOf.putIfAbsent(ppid, () => <int>[]).add(pid);
+    }
+  }
+
+  final List<int> found = <int>[];
+  final List<int> queue = <int>[rootPid];
+  while (queue.isNotEmpty) {
+    for (final int child in childrenOf[queue.removeAt(0)] ?? const <int>[]) {
+      found.add(child);
+      queue.add(child);
+    }
+  }
+  return found;
+}
+
+bool _isAlive(int pid) {
+  final String listed =
+      Process.runSync('ps', <String>['-o', 'pid=', '-p', '$pid']).stdout
+          as String;
+  return listed.trim().isNotEmpty;
+}
+
+List<int> _aliveAmong(List<int> pids) => pids.where(_isAlive).toList();
 
 void main() {
   test(
@@ -105,6 +147,63 @@ void main() {
       await process.exitCode.timeout(const Duration(seconds: 10));
 
       expect(target.readAsStringSync(), original);
+    },
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
+
+  test(
+    'SIGTERM mid-run also takes the in-flight test subprocess down with it, '
+    'rather than orphaning it',
+    () async {
+      // The interrupt half of the leak that exhausted a workstation's memory.
+      // A timeout was the way it was found, but Ctrl-C reaches the identical
+      // state: the handler restored files and called `exit`, and the test
+      // command it had started went on running with nobody left to reap it.
+      // A `flutter test` engine in that state was measured growing at roughly
+      // 130 MB/s, indefinitely.
+      final Directory dir = await _slowFixture();
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final File target = File(p.join(dir.path, 'lib', 'calc.dart'));
+      final String original = target.readAsStringSync();
+
+      final Process process = await Process.start('dart', <String>[
+        'run',
+        _binPath,
+        '--test-command',
+        'dart test',
+        target.path,
+      ], workingDirectory: dir.path);
+      process.stdout.drain<void>();
+      process.stderr.drain<void>();
+
+      // A mutated file means a subprocess is genuinely in flight — the
+      // analyzer or the test command — so there is something to orphan.
+      await _waitUntil(
+        () => target.readAsStringSync() != original,
+        timeout: const Duration(seconds: 30),
+      );
+      final List<int> inFlight = _descendantsOf(process.pid);
+      expect(
+        inFlight,
+        isNotEmpty,
+        reason: 'nothing was running, so this test could not observe a leak',
+      );
+
+      process.kill(ProcessSignal.sigterm);
+      await process.exitCode.timeout(const Duration(seconds: 10));
+
+      List<int> survivors = inFlight;
+      for (int attempt = 0; attempt < 30 && survivors.isNotEmpty; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        survivors = _aliveAmong(survivors);
+      }
+      expect(
+        survivors,
+        isEmpty,
+        reason:
+            'an orphaned subprocess outlives the run that created it and '
+            'nothing will ever reap it',
+      );
     },
     timeout: const Timeout(Duration(seconds: 60)),
   );

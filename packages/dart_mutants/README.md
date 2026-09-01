@@ -76,6 +76,41 @@ ignored — if it does not finish in time. A timed-out mutant is scored
 actually catching the wrong output, and counting it as caught would inflate
 the score the same way an uncompilable mutant would.
 
+### The kill goes to the whole process tree
+
+`flutter test` is three processes, not one — the `flutter` wrapper spawns
+`dartaotruntime`, which spawns the `flutter_tester` engine that actually runs
+the test. A signal to the wrapper does not propagate downward, and POSIX
+reparents an orphan to init rather than killing it, so killing the direct
+child left the engine **running the mutant's infinite loop forever**, with
+nothing that would ever reap it.
+
+Measured: one such orphan sat at 1.86 GB at the moment of the kill and 2.25 GB
+three seconds later — roughly 130 MB/s, indefinitely, from a single timed-out
+mutant. It outlives the run that created it, so the cost accumulates across
+runs and does not come back when this binary exits. Two runs exhausted a
+workstation's memory.
+
+The tree is snapshotted before anything is killed (the parent link is the only
+thing connecting it, and killing the root destroys it) and then killed
+**top-down**. Leaves-first was tried and measured worse: `flutter_tools` is a
+supervisor, so killing the tester while its parent is still alive makes the
+parent spawn a replacement, which the arriving kill then orphans. Any process
+that still survives is named on stderr rather than left to leak silently.
+
+`SIGINT`/`SIGTERM` take the in-flight test command down the same way, so a
+Ctrl-C mid-run is not a second route to the same leak.
+
+### Your timeout is also your memory budget
+
+`--mutant-timeout` bounds how long a runaway mutant runs *before* the kill,
+and a mutant that allocates inside its loop allocates for that whole window.
+At the 30s default that is a bounded spike; at `--mutant-timeout 300` the same
+mutant has ten times as long to grow. Raising the budget to resolve timeouts
+is the right move for score accuracy (see the output contract below) and it
+buys that accuracy with peak memory — worth knowing before raising it on a
+machine that is also running other suites.
+
 ## What this package does not decide
 
 Which files to run against, how big a mutant budget to spend, what
@@ -146,9 +181,14 @@ real CLI binary, not just the internal report types:
   mutant's test run is in flight is a correctness risk this package has not
   solved, and a wrong number is worse than a slow one.
 - **`SIGKILL` cannot be caught.** `SIGINT`/`SIGTERM` restore whatever is
-  mutated before the process exits (this is tested against the real CLI
-  binary, not simulated); no process can catch `SIGKILL`, so a `kill -9` or
-  a timeout wrapper configured to skip straight to it is still a real gap.
+  mutated and kill the in-flight test command's process tree before exiting
+  (both tested against the real CLI binary, not simulated); no process can
+  catch `SIGKILL`, so a `kill -9` or a timeout wrapper configured to skip
+  straight to it is still a real gap — and there it leaks in both directions
+  at once, leaving a mutated file on disk *and* an orphaned test process.
+- **Process enumeration is `ps`.** The tree kill needs it. On a platform
+  without `ps` this says so on stderr and degrades to killing the direct
+  child, which is the pre-0.2.3 behaviour and leaks a `flutter test` engine.
 - **Command splitting is whitespace-only.** `--test-command`/
   `--analyze-command` are split on whitespace; an argument that itself needs
   a literal space is not supported yet.

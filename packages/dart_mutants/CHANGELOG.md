@@ -1,3 +1,62 @@
+## 0.2.3
+
+**A timed-out mutant no longer leaks a runaway test process.** This is the
+release to take if you run mutation testing on a machine you also work on.
+
+`flutter test` is three processes, not one: the `flutter` wrapper spawns
+`dartaotruntime`, which spawns the `flutter_tester` engine that actually runs
+the test. The timeout gate SIGKILLed the direct child, and a signal does not
+propagate downward — POSIX reparents an orphan to init rather than killing it.
+So the engine survived, went on executing the mutant's infinite loop, and
+nothing would ever reap it.
+
+Measured, on the real `flutter test` shape rather than argued from POSIX: one
+orphan sat at **1.86 GB at the moment of the kill and 2.25 GB three seconds
+later** — roughly 130 MB/s, indefinitely, from a **single** timed-out mutant.
+It outlives the run that created it, so the cost accumulates across runs and
+does not come back when this binary exits. Two runs exhausted a workstation's
+memory, which is how it was found.
+
+The kill now takes the whole process tree. Three details are load-bearing:
+
+- **The tree is snapshotted before anything is killed.** The parent link is
+  the only thing connecting the descendants, and killing the root destroys it.
+- **They are killed top-down, root first.** Leaves-first was tried and
+  measured *worse*: `flutter_tools` is a supervisor, so killing the tester
+  while its parent is still alive makes the parent do its job and spawn a
+  replacement, which the arriving kill then orphans. The leak survived that
+  first attempt, one process smaller — the survivor check below is what caught
+  it, on the first real run.
+- **Any process that still survives is named on stderr.** A descendant started
+  between the snapshot and the kill is missed by construction, and the whole
+  point of this release is that such a leak must not be silent. The check
+  polls rather than sampling once: a 50 ms sample reported a survivor that was
+  in fact already gone, and a warning that cries wolf on every timeout is one
+  nobody reads.
+
+**`SIGINT`/`SIGTERM` now kill the in-flight test command too.** Ctrl-C reached
+the identical state by a different route — the handler restored files and
+called `exit`, leaving the test command it had started running with nobody to
+reap it. The signal watch is also armed *before* the baseline run now, which
+is the longest single command of a session and was previously outside it.
+
+Both paths are covered against the real CLI binary with real signals, not
+simulated. The timeout test carries a deliberate companion assertion that the
+fixture genuinely orphans when only the direct child is killed — without it, a
+fixture that never spawned a grandchild would pass the real test for the wrong
+reason.
+
+Two limits stated rather than hidden: process enumeration is `ps`, so a
+platform without it degrades to the old single-process kill and says so on
+stderr; and `SIGKILL` to this binary itself still leaks in both directions at
+once, because nothing can catch it.
+
+Also documents, in the README, that **`--mutant-timeout` is a memory budget as
+well as a time budget**. A mutant that allocates inside its loop allocates for
+the whole window, so raising the budget from 30s to 300s to resolve timeouts —
+which is the right move for score accuracy — buys that accuracy with peak
+memory. Worth knowing before doing it on a machine running other suites.
+
 ## 0.2.2
 
 Docs only; no behaviour change.

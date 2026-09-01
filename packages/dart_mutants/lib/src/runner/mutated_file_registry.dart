@@ -22,15 +22,27 @@ class MutatedFileRegistry {
   final Map<String, String> _originalContent = <String, String>{};
   StreamSubscription<ProcessSignal>? _sigintSubscription;
   StreamSubscription<ProcessSignal>? _sigtermSubscription;
+  void Function()? _beforeExit;
 
   bool get isArmed => _sigintSubscription != null;
 
   /// Starts watching for `SIGINT`/`SIGTERM`. Idempotent — calling it twice
   /// does not double-register.
-  void armSignalRestore() {
+  ///
+  /// [beforeExit] runs after the restore and before `exit`, for cleanup this
+  /// registry does not own. The runner passes the subprocess tree kill: an
+  /// interrupt otherwise leaves the in-flight test command's engine process
+  /// running with nobody left to reap it, which is the same unbounded leak
+  /// the timeout path had — a Ctrl-C is simply the other way to reach it.
+  ///
+  /// It must be **synchronous**. This ends in `exit()`, which does not wait
+  /// for pending futures, so async work here would be scheduled and then
+  /// discarded.
+  void armSignalRestore({void Function()? beforeExit}) {
     if (isArmed) {
       return;
     }
+    _beforeExit = beforeExit;
     _sigintSubscription = ProcessSignal.sigint.watch().listen(
       (ProcessSignal _) => _onSignal(),
     );
@@ -51,7 +63,10 @@ class MutatedFileRegistry {
   }
 
   void _onSignal() {
+    // Files first: a mutated working tree is the failure that outlives the
+    // process, and it is the cheap one to undo.
     restoreAll();
+    _beforeExit?.call();
     exit(1);
   }
 
@@ -87,5 +102,6 @@ class MutatedFileRegistry {
     await _sigtermSubscription?.cancel();
     _sigintSubscription = null;
     _sigtermSubscription = null;
+    _beforeExit = null;
   }
 }
