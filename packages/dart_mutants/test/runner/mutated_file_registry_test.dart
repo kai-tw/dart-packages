@@ -9,7 +9,9 @@ void main() {
   late File file;
 
   setUp(() {
-    tempDir = Directory.systemTemp.createTempSync('mutated_file_registry_test_');
+    tempDir = Directory.systemTemp.createTempSync(
+      'mutated_file_registry_test_',
+    );
     file = File(p.join(tempDir.path, 'target.dart'))
       ..writeAsStringSync('original content');
   });

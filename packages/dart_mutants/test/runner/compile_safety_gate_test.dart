@@ -29,12 +29,15 @@ void main() {
     expect(await gate().compiles(file.path), isTrue);
   });
 
-  test('[boundary] a file with only a warning still counts as compiling', () async {
-    // An unused import is a warning, not an error — the file still runs.
-    final File file = File(p.join(tempDir.path, 'warn.dart'))
-      ..writeAsStringSync("import 'dart:math';\n\nint f() => 1;\n");
-    expect(await gate().compiles(file.path), isTrue);
-  });
+  test(
+    '[boundary] a file with only a warning still counts as compiling',
+    () async {
+      // An unused import is a warning, not an error — the file still runs.
+      final File file = File(p.join(tempDir.path, 'warn.dart'))
+        ..writeAsStringSync("import 'dart:math';\n\nint f() => 1;\n");
+      expect(await gate().compiles(file.path), isTrue);
+    },
+  );
 
   test('[partition] a genuine type error does not compile', () async {
     final File file = File(p.join(tempDir.path, 'broken.dart'))

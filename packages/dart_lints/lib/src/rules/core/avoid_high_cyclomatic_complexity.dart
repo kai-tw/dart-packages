@@ -342,7 +342,8 @@ class _ComplexityCounter extends RecursiveAstVisitor<void> {
     return false;
   }
 
-  bool _isBareReference(Expression e) => e is SimpleIdentifier || e is ThisExpression;
+  bool _isBareReference(Expression e) =>
+      e is SimpleIdentifier || e is ThisExpression;
 
   @override
   void visitConditionalExpression(ConditionalExpression node) {

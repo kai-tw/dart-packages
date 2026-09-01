@@ -25,7 +25,10 @@ void main() {
     final List<Mutant> mutants = _mutate('int f(bool a) => a ? 1 : 2;');
     expect(mutants, hasLength(1));
     final Mutant m = mutants.single;
-    expect(m.applyTo('int f(bool a) => a ? 1 : 2;'), 'int f(bool a) => a ? 2 : 1;');
+    expect(
+      m.applyTo('int f(bool a) => a ? 1 : 2;'),
+      'int f(bool a) => a ? 2 : 1;',
+    );
     expect(m.operatorName, 'ternary_swap');
   });
 

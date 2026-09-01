@@ -10,8 +10,11 @@ List<Mutant> _mutate(String source, {String path = 'lib/foo.dart'}) {
     content: source,
     throwIfDiagnostics: false,
   );
-  final MutationVisitor visitor = RelationalOperatorReplacement()
-      .createVisitor(path, result.lineInfo, source);
+  final MutationVisitor visitor = RelationalOperatorReplacement().createVisitor(
+    path,
+    result.lineInfo,
+    source,
+  );
   result.unit.accept(visitor);
   return visitor.mutants;
 }

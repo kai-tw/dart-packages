@@ -82,16 +82,19 @@ void main() {
         },
       );
 
-      test('a self import with no layer segment resolves to null, not caught', () {
-        expect(
-          _lint(
-            "import 'package:myapp/core/http/client.dart';",
-            path: 'lib/features/x/domain/x_repository.dart',
-            packageName: 'myapp',
-          ),
-          isEmpty,
-        );
-      });
+      test(
+        'a self import with no layer segment resolves to null, not caught',
+        () {
+          expect(
+            _lint(
+              "import 'package:myapp/core/http/client.dart';",
+              path: 'lib/features/x/domain/x_repository.dart',
+              packageName: 'myapp',
+            ),
+            isEmpty,
+          );
+        },
+      );
     },
   );
 

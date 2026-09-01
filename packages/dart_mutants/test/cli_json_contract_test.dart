@@ -47,7 +47,9 @@ dev_dependencies:
     'get',
   ], workingDirectory: dir.path);
   if (pubGet.exitCode != 0) {
-    throw StateError('dart pub get failed:\n${pubGet.stdout}\n${pubGet.stderr}');
+    throw StateError(
+      'dart pub get failed:\n${pubGet.stdout}\n${pubGet.stderr}',
+    );
   }
   return dir;
 }
@@ -78,8 +80,7 @@ void main() {
       final Object? decoded = jsonDecode(result.stdout as String);
       expect(decoded, isA<Map<String, Object?>>());
       final Map<String, Object?> json = decoded! as Map<String, Object?>;
-      final Map<String, Object?> files =
-          json['files']! as Map<String, Object?>;
+      final Map<String, Object?> files = json['files']! as Map<String, Object?>;
       final Map<String, Object?> fileReport =
           files.values.single as Map<String, Object?>;
       expect(fileReport['undetected'], 1);
