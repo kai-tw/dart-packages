@@ -1,6 +1,6 @@
 name: ui_kit
 description: This is a UI kit that shares Flutter components through my projects.
-version: 3.0.1
+version: 3.1.0
 repository: https://github.com/kai-tw/kai-packages/tree/main/packages/ui_kit
 
 environment:
@@ -16,6 +16,11 @@ dependencies:
   package_info_plus: ^9.0.0
 
 dev_dependencies:
+  # A workspace path dependency, not a git tag: inside this repo the engine
+  # under test IS the working tree. Consuming apps pin `dart_mutants` by tag
+  # instead, because for them it is a released tool rather than a sibling.
+  dart_mutants:
+    path: ../dart_mutants
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter

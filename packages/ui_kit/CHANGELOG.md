@@ -1,3 +1,78 @@
+## 3.1.0
+
+`CommonBadge` gains tone, size and a standalone form; `CommonNavTile` finally
+forwards a badge label. All additive — no existing call changes.
+
+Every item below came out of one feature (CherishCRM's record-sync conflict
+marker), and each one had already forced a workaround at the call site, which
+is the evidence that the widget was short of a parameter rather than that the
+caller wanted something exotic.
+
+- **`backgroundColor` / `foregroundColor`.** The fill was `colorScheme.error`
+  and nothing else. Not every "there is something here" is an error: a mark
+  that asks the user a question, or that reports a plain fact about the row,
+  reads as a fault in red. It could not be corrected from outside either,
+  because the colour comes from `Badge`'s own defaults rather than from
+  anything in the ambient theme a call site controls.
+
+- **`foregroundColor` resolves through `BadgeTheme`.** The ink is
+  `foregroundColor ?? badgeTheme.textColor ?? colorScheme.onError`, mirroring
+  Material's own three rungs. Skipping the middle one — which this change did
+  at first — makes a `Text` label follow an ambient `BadgeTheme` while an
+  `Icon` label falls to `onError`, so the two kinds of label diverge under
+  exactly the configuration callers were told to use before 3.1.0.
+
+- **`foregroundColor` reaches an `Icon` label.** `label` is typed `Widget?`,
+  so an icon has always been a legal label — but Material's `Badge` puts its
+  text colour on a `DefaultTextStyle` only and installs no `IconTheme`, so an
+  icon label was drawn in whatever icon colour the surrounding tree carried,
+  usually a dark `onSurface` on a saturated fill. Nothing warns; the glyph is
+  just close to invisible, and each caller re-discovers the cause and passes a
+  `color:` on the icon by hand. `CommonBadge` now merges an `IconTheme` around
+  the label so the parameter means the same thing for both kinds.
+
+- **`size`.** Material's defaults are 6.0 for the dot and 16.0 for a labelled
+  badge, neither reachable through this widget. A 6dp dot on a 40dp avatar
+  reads as a speck. Which Material dimension `size` sets follows from `type`,
+  so the single parameter cannot be ambiguous: `smallSize` for `minimal`,
+  `largeSize` for `normal`.
+
+  ⚠️ **For a labelled badge it is a MINIMUM, not a diameter.** Material passes
+  `largeSize` as the `minSize` of an intrinsic stadium, so a label bigger than
+  `size` wins: a default 24dp `Icon` renders a 24dp badge however small a
+  `size` is asked for. Size the label too, or measure the result. The dot has
+  no content, so `smallSize` is exact. There is a test pinning this, because
+  the first draft of the dartdoc called it a diameter and was wrong.
+
+- **`padding`.** With `EdgeInsets.zero` and a square label, the badge's
+  `StadiumBorder` renders as a circle rather than an oval — which is what an
+  icon label almost always wants. Ignored when there is no label.
+
+  Before these two, the only way to size a badge was to wrap the call site in
+  a `BadgeTheme`, which works but means reaching around the widget to
+  configure the widget.
+
+- **`CommonBadge.standalone`.** The overlay form covers a corner of whatever
+  it hangs on. That is free on an avatar and destructive on an icon that is
+  itself information — a status glyph, a type indicator — where the caller
+  needs the mark beside the thing rather than over it. Previously the only
+  route was to abandon `CommonBadge` and use Material's `Badge` directly,
+  losing everything above.
+
+  ⚠️ **`child` is now `Widget?`, so the default constructor's `required
+  child:` accepts null too.** `.standalone` is the readable spelling for the
+  common case, not a wall around the other one — and the childless *default*
+  constructor is in fact the only way to get a standalone **dot**, since
+  `.standalone` fixes `type` to `normal` and therefore always carries a label
+  or the `!` fallback. Adopters subclassing `CommonBadge` or reading `.child`
+  off an instance would see the widened type; nothing in this repo does.
+
+- **`CommonNavTile.iconBadgeLabel`.** The tile accepted an `iconBadgeType` but
+  never forwarded a label to the `CommonBadge` it built, so `normal` could
+  only ever render the fallback `Text('!')`. A caller wanting a count or its
+  own glyph had to abandon `iconBadgeType` and wrap `leading` by hand — which
+  is what the first caller that hit this did, before noticing why.
+
 ## 3.0.1
 
 `src/form_components/datetime_picker_field.dart` split into three files, none
