@@ -77,29 +77,46 @@ class CommonBadge extends StatelessWidget {
   /// pass a `color:` on the icon itself.
   final Color? foregroundColor;
 
-  /// The badge's diameter, in logical pixels.
+  /// How big the badge is, in logical pixels.
   ///
   /// Which Material dimension this sets follows from [type], so one parameter
   /// cannot be ambiguous: the dot's `smallSize` for [CommonBadgeType.minimal]
   /// (default 6.0), the labelled badge's `largeSize` for
   /// [CommonBadgeType.normal] (default 16.0).
   ///
-  /// The defaults are small enough that a bare dot reads as a speck on a
-  /// 40dp avatar and says nothing to anyone not looking straight at it.
+  /// ⚠️ **For a labelled badge this is a MINIMUM, not a diameter.** Material
+  /// passes `largeSize` as the `minSize` of an intrinsic stadium
+  /// (`badge.dart:192`), so a label larger than [size] wins and the badge
+  /// grows to fit it — a default 24dp [Icon] renders a 24dp badge no matter
+  /// what is asked for here. Size the label too (`Icon(size: …)`), or measure
+  /// the result; asking for 18 does not make it 18. The dot has no content,
+  /// so `smallSize` is exact.
+  ///
+  /// Material's defaults are small enough that a bare dot reads as a speck on
+  /// a 40dp avatar and says nothing to anyone not looking straight at it.
   final double? size;
 
   /// Padding around a [label]. Defaults to Material's 4.0 horizontal.
   ///
-  /// `EdgeInsets.zero` with a square label and an explicit [size] is what
-  /// turns the badge's `StadiumBorder` into a true circle instead of an oval
-  /// — the shape an icon label almost always wants.
+  /// `EdgeInsets.zero` with a square label makes the badge's `StadiumBorder`
+  /// render as a circle rather than an oval — the shape an icon label almost
+  /// always wants. Note that it is the **label's** size that then decides the
+  /// circle's diameter unless [size] is the larger of the two; see [size].
+  ///
+  /// Ignored when there is no label: Material only pads the labelled arm.
   final EdgeInsetsGeometry? padding;
 
-  /// What the badge hangs on, or `null` for the standalone form.
+  /// What the badge hangs on, or `null` for a badge with nothing behind it.
   ///
-  /// Still `required` on the default constructor — every existing call passes
-  /// one, and a badge with no host is a different enough thing to deserve its
-  /// own constructor rather than a null nobody would think to try.
+  /// `required` on the default constructor means the argument must be written,
+  /// **not that it must be non-null** — `CommonBadge(type: minimal, child:
+  /// null)` is legal and renders a bare standalone dot, which is the only way
+  /// to get one, since [CommonBadge.standalone] fixes `type` to
+  /// [CommonBadgeType.normal] and therefore always carries a label or the `!`
+  /// fallback.
+  ///
+  /// The named constructor is the readable spelling for the common case, not
+  /// a wall around this one.
   final Widget? child;
 
   @override
@@ -125,9 +142,21 @@ class CommonBadge extends StatelessWidget {
   }
 
   /// The label, with the foreground colour reaching an icon as well as text.
+  ///
+  /// ⚠️ **The three rungs mirror `Badge`'s own resolution and must keep
+  /// mirroring it.** `Badge` reads `textColor ?? badgeTheme.textColor ??
+  /// colorScheme.onError` (badge.dart:196). Skipping the middle rung here —
+  /// which the first draft of this method did — makes a `Text` label take the
+  /// ambient `BadgeTheme`'s colour while an `Icon` label takes `onError`, so
+  /// the two kinds of label diverge under a themed badge. That divergence is
+  /// the exact defect this method exists to prevent, reintroduced one rung
+  /// further down.
   Widget _colouredLabel(BuildContext context) {
     final Widget content = label ?? const Text('!');
-    final Color ink = foregroundColor ?? Theme.of(context).colorScheme.onError;
+    final Color ink =
+        foregroundColor ??
+        BadgeTheme.of(context).textColor ??
+        Theme.of(context).colorScheme.onError;
 
     return IconTheme.merge(
       data: IconThemeData(color: ink),
