@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# pre-commit — blocks a commit unless dart format + dart_lints are clean.
+#
+# WHY A GIT HOOK: a manual pre-commit lint step is exactly the one a session
+# skips under load. This runs BEFORE the commit and can refuse it outright,
+# instead of a later gate discovering the violation after it already landed.
+#
+# Wiring (not tracked by git — redo after a fresh clone):
+#   git config core.hooksPath tool/githooks
+#
+# Bypass (rare, deliberate): git commit --no-verify
+
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)" || exit 0
+
+staged_dart=$(git diff --cached --name-only --diff-filter=d -- '*.dart')
+[ -n "$staged_dart" ] || exit 0
+
+# shellcheck disable=SC2086  # intentional word-splitting on newline-separated paths
+if ! fmt_out=$(dart format --output=none --set-exit-if-changed $staged_dart 2>&1); then
+  echo "BLOCKED by pre-commit: dart format would change staged files." >&2
+  echo "$fmt_out" >&2
+  echo "Fix:  dart format $staged_dart   (then re-stage and commit)" >&2
+  exit 1
+fi
+
+if ! lint_out=$(dart run dart_lints 2>&1); then
+  echo "BLOCKED by pre-commit: dart_lints found issues." >&2
+  echo "$lint_out" >&2
+  echo "Fix:  dart run dart_lints" >&2
+  exit 1
+fi
+
+exit 0
