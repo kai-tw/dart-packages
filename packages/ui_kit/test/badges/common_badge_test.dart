@@ -85,13 +85,15 @@ void main() {
     });
   });
 
-  group('size', () {
-    testWidgets('sizes the dot', (WidgetTester tester) async {
+  group('minSize', () {
+    testWidgets('is met exactly by the dot, which has no content', (
+      WidgetTester tester,
+    ) async {
       await _pump(
         tester,
         const CommonBadge(
           type: CommonBadgeType.minimal,
-          size: 12.0,
+          minSize: 12.0,
           child: _host,
         ),
       );
@@ -99,14 +101,14 @@ void main() {
       expect(_markSize(tester), const Size(12.0, 12.0));
     });
 
-    testWidgets('sizes a labelled badge whose label fits inside it', (
+    testWidgets('is met exactly when the label fits inside it', (
       WidgetTester tester,
     ) async {
       await _pump(
         tester,
         const CommonBadge(
           type: CommonBadgeType.normal,
-          size: 18.0,
+          minSize: 18.0,
           padding: EdgeInsets.zero,
           label: _mark,
           child: _host,
@@ -116,18 +118,19 @@ void main() {
       expect(_markSize(tester), const Size(18.0, 18.0));
     });
 
-    // The documented caveat, pinned so the doc cannot quietly become false:
-    // `largeSize` reaches Material as an intrinsic stadium's `minSize`, so a
-    // label bigger than `size` wins. A default 24dp icon renders a 24dp badge
-    // however small a `size` is asked for.
-    testWidgets('is a minimum for a labelled badge, not a diameter', (
+    // What the name is for. `largeSize` reaches Material as an intrinsic
+    // stadium's `minSize`, so a label bigger than the floor wins — a default
+    // 24dp icon renders a 24dp badge however small a value is asked for. That
+    // growth is correct (`'99+'` has to fit), and it is why the parameter is
+    // not called `size`.
+    testWidgets('is exceeded by a label larger than it', (
       WidgetTester tester,
     ) async {
       await _pump(
         tester,
         const CommonBadge(
           type: CommonBadgeType.normal,
-          size: 10.0,
+          minSize: 10.0,
           padding: EdgeInsets.zero,
           label: Icon(Icons.priority_high),
           child: _host,
@@ -253,7 +256,7 @@ void main() {
           builder: (BuildContext context) => CommonBadge.standalone(
             label: _mark,
             backgroundColor: Theme.of(context).colorScheme.primary,
-            size: 18.0,
+            minSize: 18.0,
             padding: EdgeInsets.zero,
           ),
         ),
@@ -280,7 +283,7 @@ void main() {
         tester,
         const CommonBadge(
           type: CommonBadgeType.minimal,
-          size: 12.0,
+          minSize: 12.0,
           child: null,
         ),
       );
