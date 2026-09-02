@@ -15,7 +15,7 @@ class CommonBadge extends StatelessWidget {
     this.alignment,
     this.backgroundColor,
     this.foregroundColor,
-    this.size,
+    this.minSize,
     this.padding,
     required this.child,
   });
@@ -38,7 +38,7 @@ class CommonBadge extends StatelessWidget {
     this.label,
     this.backgroundColor,
     this.foregroundColor,
-    this.size,
+    this.minSize,
     this.padding,
   }) : type = CommonBadgeType.normal,
        alignment = null,
@@ -77,31 +77,36 @@ class CommonBadge extends StatelessWidget {
   /// pass a `color:` on the icon itself.
   final Color? foregroundColor;
 
-  /// How big the badge is, in logical pixels.
+  /// The smallest the badge may render, in logical pixels.
   ///
   /// Which Material dimension this sets follows from [type], so one parameter
   /// cannot be ambiguous: the dot's `smallSize` for [CommonBadgeType.minimal]
   /// (default 6.0), the labelled badge's `largeSize` for
   /// [CommonBadgeType.normal] (default 16.0).
   ///
-  /// ⚠️ **For a labelled badge this is a MINIMUM, not a diameter.** Material
-  /// passes `largeSize` as the `minSize` of an intrinsic stadium
-  /// (`badge.dart:192`), so a label larger than [size] wins and the badge
-  /// grows to fit it — a default 24dp [Icon] renders a 24dp badge no matter
-  /// what is asked for here. Size the label too (`Icon(size: …)`), or measure
-  /// the result; asking for 18 does not make it 18. The dot has no content,
-  /// so `smallSize` is exact.
+  /// ⚠️ **It is a floor, not a fixed size** — hence the name. Material passes
+  /// `largeSize` as the `minSize` of an intrinsic stadium (`badge.dart:192`),
+  /// so a label bigger than this wins and the badge grows to fit it: a default
+  /// 24dp [Icon] renders a 24dp badge however small a value is asked for.
+  /// Give the label a size of its own (`Icon(size: …)`) if the badge must not
+  /// exceed this.
+  ///
+  /// That growth is correct for the labels a badge usually carries — `'99+'`
+  /// has to fit — which is why this is named for what it does rather than
+  /// clamped into the fixed size an earlier name promised.
+  ///
+  /// The dot has no content, so its floor is always met **exactly**.
   ///
   /// Material's defaults are small enough that a bare dot reads as a speck on
   /// a 40dp avatar and says nothing to anyone not looking straight at it.
-  final double? size;
+  final double? minSize;
 
   /// Padding around a [label]. Defaults to Material's 4.0 horizontal.
   ///
   /// `EdgeInsets.zero` with a square label makes the badge's `StadiumBorder`
   /// render as a circle rather than an oval — the shape an icon label almost
-  /// always wants. Note that it is the **label's** size that then decides the
-  /// circle's diameter unless [size] is the larger of the two; see [size].
+  /// always wants. The circle's diameter is then the label's own size, or
+  /// [minSize] if that is larger.
   ///
   /// Ignored when there is no label: Material only pads the labelled arm.
   final EdgeInsetsGeometry? padding;
@@ -134,8 +139,8 @@ class CommonBadge extends StatelessWidget {
       alignment: alignment,
       backgroundColor: backgroundColor,
       textColor: foregroundColor,
-      smallSize: hasLabel ? null : size,
-      largeSize: hasLabel ? size : null,
+      smallSize: hasLabel ? null : minSize,
+      largeSize: hasLabel ? minSize : null,
       padding: padding,
       child: host,
     );

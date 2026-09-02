@@ -1,3 +1,26 @@
+## 4.0.0
+
+- **BREAKING** — `CommonBadge.size` is renamed `CommonBadge.minSize`.
+
+  3.1.0 shipped it a day earlier under a name that promised something
+  Material does not do. `largeSize` reaches Material as the `minSize` of an
+  intrinsic stadium, so a label bigger than the value wins: a default 24dp
+  `Icon` renders a 24dp badge however small a `size` is asked for. The 3.1.0
+  test asserted `18.0` and passed on a badge drawing 24px, and the dartdoc
+  called it a diameter.
+
+  **The fix is the name, not the behaviour.** Making it a fixed size would
+  mean clamping the label, and growing to fit is the right thing for the
+  labels a badge usually carries — `'99+'` has to fit. What was wrong was a
+  parameter called `size` that could be exceeded. `minSize` is honest on both
+  arms: the dot has no content, so its floor is always met exactly.
+
+  **Adopters:** rename the argument. Nothing else changes — same behaviour,
+  same defaults, same two Material dimensions selected by `type`. If you were
+  relying on the value being the rendered size, give the label its own size
+  too (`Icon(size: …)`), or measure with `tester.getSize`; there is a test in
+  this package pinning both directions.
+
 ## 3.1.0
 
 `CommonBadge` gains tone, size and a standalone form; `CommonNavTile` finally
