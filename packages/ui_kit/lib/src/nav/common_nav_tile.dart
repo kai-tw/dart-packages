@@ -17,6 +17,7 @@ class CommonNavTile extends StatelessWidget {
     String? subtitle,
     required VoidCallback onTap,
     CommonBadgeType iconBadgeType = CommonBadgeType.hidden,
+    Widget? iconBadgeLabel,
   }) : this._(
          key: key,
          padding: padding,
@@ -25,6 +26,7 @@ class CommonNavTile extends StatelessWidget {
          subtitle: subtitle,
          onTap: onTap,
          iconBadgeType: iconBadgeType,
+         iconBadgeLabel: iconBadgeLabel,
          trailing: _CommonNavTileTrailing.none,
          externalSemanticLabel: null,
        );
@@ -37,6 +39,7 @@ class CommonNavTile extends StatelessWidget {
     String? subtitle,
     required VoidCallback onTap,
     CommonBadgeType iconBadgeType = CommonBadgeType.hidden,
+    Widget? iconBadgeLabel,
   }) : this._(
          key: key,
          padding: padding,
@@ -45,6 +48,7 @@ class CommonNavTile extends StatelessWidget {
          subtitle: subtitle,
          onTap: onTap,
          iconBadgeType: iconBadgeType,
+         iconBadgeLabel: iconBadgeLabel,
          trailing: _CommonNavTileTrailing.internal,
          externalSemanticLabel: null,
        );
@@ -61,6 +65,7 @@ class CommonNavTile extends StatelessWidget {
     String? subtitle,
     required VoidCallback onTap,
     CommonBadgeType iconBadgeType = CommonBadgeType.hidden,
+    Widget? iconBadgeLabel,
     String? externalSemanticLabel,
   }) : this._(
          key: key,
@@ -70,6 +75,7 @@ class CommonNavTile extends StatelessWidget {
          subtitle: subtitle,
          onTap: onTap,
          iconBadgeType: iconBadgeType,
+         iconBadgeLabel: iconBadgeLabel,
          trailing: _CommonNavTileTrailing.external,
          externalSemanticLabel: externalSemanticLabel,
        );
@@ -82,6 +88,7 @@ class CommonNavTile extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     required this.iconBadgeType,
+    required this.iconBadgeLabel,
     required _CommonNavTileTrailing trailing,
     required String? externalSemanticLabel,
   }) : _trailing = trailing,
@@ -90,6 +97,16 @@ class CommonNavTile extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final Widget leading;
   final CommonBadgeType iconBadgeType;
+
+  /// What the leading badge shows when [iconBadgeType] is
+  /// [CommonBadgeType.normal].
+  ///
+  /// Left null, the badge falls back to `CommonBadge`'s `Text('!')` — which
+  /// used to be the only thing this tile could produce, because the label was
+  /// never forwarded at all. A caller wanting a count or its own glyph had to
+  /// abandon [iconBadgeType] entirely and wrap [leading] by hand.
+  final Widget? iconBadgeLabel;
+
   final String title;
   final String? subtitle;
   final VoidCallback onTap;
@@ -117,7 +134,11 @@ class CommonNavTile extends StatelessWidget {
       contentPadding:
           padding ?? const EdgeInsets.symmetric(horizontal: 8.0, vertical: 0.0),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.0)),
-      leading: CommonBadge(type: iconBadgeType, child: leading),
+      leading: CommonBadge(
+        type: iconBadgeType,
+        label: iconBadgeLabel,
+        child: leading,
+      ),
       title: Text(title),
       subtitle: subtitle != null ? Text(subtitle!) : null,
       trailing: trailing,
