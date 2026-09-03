@@ -3,6 +3,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
 import 'data/adapters/firebase_crashlytics_adapter.dart';
+import 'data/adapters/firebase_crashlytics_client.dart';
 import 'data/adapters/log_error_redactor.dart';
 import 'data/adapters/logger_adapter.dart';
 import 'data/log_repository_impl.dart';
@@ -180,18 +181,21 @@ class LogSystem {
         // reaching it needs a registered `FirebaseCrashlyticsPlatform`, which
         // in a pure-Dart test binary fails an internal plugin assertion
         // (`pluginConstants['isCrashlyticsCollectionEnabled'] != null`) the
-        // moment the adapter's constructor calls
-        // `setCrashlyticsCollectionEnabled` — before this package's own code
-        // runs at all. Faking that safely means mocking
-        // `FirebaseCrashlyticsPlatform.instanceFor`, a surface this package
-        // does not own, for two lines that only choose which already-tested
-        // constructor argument to pass. `FirebaseCrashlyticsAdapter` itself —
-        // every method, the enabled gate, the custom-key wiring — is fully
-        // covered directly, with a `MockFirebaseCrashlytics` standing in for
-        // this one call.
+        // moment `FirebaseCrashlyticsClient.wrapping`'s result is first used
+        // — before this package's own code runs at all. Faking that safely
+        // means mocking `FirebaseCrashlyticsPlatform.instanceFor`, a surface
+        // this package does not own, for three lines that only choose which
+        // already-tested constructor argument to pass.
+        // `FirebaseCrashlyticsAdapter` itself — every method, the enabled
+        // gate, the custom-key wiring — is fully covered directly, against a
+        // hand-written fake `FirebaseCrashlyticsClient`; the thin real
+        // wrapper this line builds is covered separately, against a mocked
+        // `FirebaseCrashlytics` — see both types' own doc comments.
         report: hasFirebase
             ? FirebaseCrashlyticsAdapter(
-                FirebaseCrashlytics.instance,
+                FirebaseCrashlyticsClient.wrapping(
+                  FirebaseCrashlytics.instance,
+                ),
                 enabled: reportCrashes && kReleaseMode,
                 customKeys: customKeys,
                 deferredCustomKeys: deferredCustomKeys,

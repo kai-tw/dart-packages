@@ -1,58 +1,102 @@
 import 'dart:io';
 
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_test/flutter_test.dart';
 // Not exported: the crash-reporter egress is package-internal, and this is
 // the single highest-value file to test directly — everything that leaves
 // the device does so from here.
 import 'package:log_system/src/data/adapters/firebase_crashlytics_adapter.dart';
-import 'package:mocktail/mocktail.dart';
+import 'package:log_system/src/data/adapters/firebase_crashlytics_client.dart';
 
-/// `FirebaseCrashlytics` has a private constructor
-/// (`FirebaseCrashlytics._({required this.app})`), so a hand-written fake
-/// cannot `extends` it — there is no accessible super-constructor to call.
-/// `Mock`'s `implements` sidesteps that: it satisfies the interface via
-/// `noSuchMethod` and never calls the real constructor at all.
-class _MockFirebaseCrashlytics extends Mock implements FirebaseCrashlytics {}
+/// Records every call, in order, plus each call's argument content.
+///
+/// A hand-written fake against [FirebaseCrashlyticsClient] rather than a
+/// `mocktail` mock against `FirebaseCrashlytics`, which is the whole point of
+/// that split: this adapter's own behaviour — the enabled gate, message
+/// formatting, which level maps to which call — is tested here with plain
+/// list/map assertions and no mocking-library ceremony at all. The one
+/// mocked test against the real SDK type lives in
+/// `firebase_crashlytics_client_test.dart`, confined to the thin wrapper
+/// that actually touches it.
+class _RecordingCrashlyticsClient implements FirebaseCrashlyticsClient {
+  /// One entry per call, in order — the same convention
+  /// `log_system_test.dart`'s `_RecordingSink` uses, so "nothing else
+  /// happened" is `expect(calls, hasLength(1))`, not a mocking-library
+  /// `verifyNoMoreInteractions`.
+  final List<String> calls = <String>[];
 
-void main() {
-  late _MockFirebaseCrashlytics instance;
+  final Map<String, Object> customKeys = <String, Object>{};
 
-  setUpAll(() {
-    // mocktail needs a fallback for any type used with `any()` on a method
-    // whose parameter is not a primitive — `stackTrace` in `recordError`.
-    registerFallbackValue(StackTrace.empty);
+  final List<_RecordedError> recordedErrors = <_RecordedError>[];
+
+  @override
+  Future<void> setCrashlyticsCollectionEnabled(bool enabled) async {
+    calls.add('setCrashlyticsCollectionEnabled:$enabled');
+  }
+
+  @override
+  Future<void> setCustomKey(String key, Object value) async {
+    calls.add('setCustomKey:$key');
+    customKeys[key] = value;
+  }
+
+  @override
+  Future<void> log(String message) async {
+    calls.add('log:$message');
+  }
+
+  @override
+  Future<void> recordError(
+    Object exception,
+    StackTrace? stackTrace, {
+    required String? reason,
+    required bool printDetails,
+    required bool fatal,
+  }) async {
+    calls.add('recordError:$reason');
+    recordedErrors.add(
+      _RecordedError(
+        exception: exception,
+        stackTrace: stackTrace,
+        reason: reason,
+        printDetails: printDetails,
+        fatal: fatal,
+      ),
+    );
+  }
+}
+
+class _RecordedError {
+  const _RecordedError({
+    required this.exception,
+    required this.stackTrace,
+    required this.reason,
+    required this.printDetails,
+    required this.fatal,
   });
 
+  final Object exception;
+  final StackTrace? stackTrace;
+  final String? reason;
+  final bool printDetails;
+  final bool fatal;
+}
+
+void main() {
+  late _RecordingCrashlyticsClient client;
+
   setUp(() {
-    instance = _MockFirebaseCrashlytics();
-    when(
-      () => instance.setCrashlyticsCollectionEnabled(any()),
-    ).thenAnswer((_) async {});
-    when(
-      () => instance.setCustomKey(any(), any()),
-    ).thenAnswer((_) async {});
-    when(
-      () => instance.recordError(
-        any(),
-        any(),
-        reason: any(named: 'reason'),
-        printDetails: any(named: 'printDetails'),
-        fatal: any(named: 'fatal'),
-      ),
-    ).thenAnswer((_) async {});
-    when(() => instance.log(any())).thenAnswer((_) async {});
+    client = _RecordingCrashlyticsClient();
   });
 
   group('the collection switch is thrown on every construction', () {
     test('enabled: true switches collection on', () {
-      FirebaseCrashlyticsAdapter(instance, enabled: true);
-      verify(() => instance.setCrashlyticsCollectionEnabled(true)).called(1);
+      FirebaseCrashlyticsAdapter(client, enabled: true);
+      expect(client.calls, <String>['setCrashlyticsCollectionEnabled:true']);
     });
 
     test('enabled: false switches collection off', () {
-      FirebaseCrashlyticsAdapter(instance, enabled: false);
-      verify(() => instance.setCrashlyticsCollectionEnabled(false)).called(1);
+      FirebaseCrashlyticsAdapter(client, enabled: false);
+      expect(client.calls, <String>['setCrashlyticsCollectionEnabled:false']);
     });
 
     test(
@@ -63,20 +107,12 @@ void main() {
         // kReleaseMode`. Asserted because a caller relying on the default
         // getting flipped silently by a refactor would ship every debug
         // build reporting to production Crashlytics.
-        FirebaseCrashlyticsAdapter(instance);
-        verify(
-          () => instance.setCrashlyticsCollectionEnabled(false),
-        ).called(1);
+        FirebaseCrashlyticsAdapter(client);
+        expect(client.calls, <String>[
+          'setCrashlyticsCollectionEnabled:false',
+        ]);
       },
     );
-
-    test('always switched, whatever the value — never left at the SDK '
-        'default', () {
-      // The SDK default is on. Skipping the call on a disabled build would
-      // leave debug-run crashes reporting to the same project as real ones.
-      FirebaseCrashlyticsAdapter(instance, enabled: false);
-      verify(() => instance.setCrashlyticsCollectionEnabled(false)).called(1);
-    });
   });
 
   group('custom keys are gated by enabled, not sent unconditionally', () {
@@ -84,32 +120,34 @@ void main() {
       'disabled: no custom key reaches the reporter, deferred or not',
       () async {
         FirebaseCrashlyticsAdapter(
-          instance,
+          client,
           enabled: false,
           customKeys: const <String, String>{'channel': 'beta'},
           deferredCustomKeys: () async => <String, String>{'late': 'value'},
         );
         await Future<void>.delayed(Duration.zero);
-        verifyNever(() => instance.setCustomKey(any(), any()));
+        expect(client.customKeys, isEmpty);
       },
     );
 
     test('enabled: every entry in customKeys is stamped', () {
       FirebaseCrashlyticsAdapter(
-        instance,
+        client,
         enabled: true,
         customKeys: const <String, String>{
           'channel': 'beta',
           'sha': 'abc123',
         },
       );
-      verify(() => instance.setCustomKey('channel', 'beta')).called(1);
-      verify(() => instance.setCustomKey('sha', 'abc123')).called(1);
+      expect(client.customKeys, <String, Object>{
+        'channel': 'beta',
+        'sha': 'abc123',
+      });
     });
 
     test('enabled with no customKeys: nothing is stamped', () {
-      FirebaseCrashlyticsAdapter(instance, enabled: true);
-      verifyNever(() => instance.setCustomKey(any(), any()));
+      FirebaseCrashlyticsAdapter(client, enabled: true);
+      expect(client.customKeys, isEmpty);
     });
 
     test(
@@ -117,7 +155,7 @@ void main() {
       'returns',
       () async {
         FirebaseCrashlyticsAdapter(
-          instance,
+          client,
           enabled: true,
           deferredCustomKeys: () async => <String, String>{
             'install_id': 'xyz',
@@ -125,17 +163,17 @@ void main() {
         );
         // Not yet — the constructor does not await it, on purpose: it needs a
         // platform round-trip and must not stall startup on it.
-        verifyNever(() => instance.setCustomKey('install_id', any()));
+        expect(client.customKeys, isEmpty);
 
         await Future<void>.delayed(Duration.zero);
-        verify(() => instance.setCustomKey('install_id', 'xyz')).called(1);
+        expect(client.customKeys, <String, Object>{'install_id': 'xyz'});
       },
     );
 
     test('no deferredCustomKeys: nothing pending, nothing stamped', () async {
-      FirebaseCrashlyticsAdapter(instance, enabled: true);
+      FirebaseCrashlyticsAdapter(client, enabled: true);
       await Future<void>.delayed(Duration.zero);
-      verifyNever(() => instance.setCustomKey(any(), any()));
+      expect(client.customKeys, isEmpty);
     });
   });
 
@@ -143,36 +181,31 @@ void main() {
     for (final bool enabled in <bool>[true, false]) {
       test('debug — enabled: $enabled', () async {
         final FirebaseCrashlyticsAdapter adapter = FirebaseCrashlyticsAdapter(
-          instance,
+          client,
           enabled: enabled,
         );
-        // The construction itself is the only interaction so far — verified
-        // here so `verifyNoMoreInteractions` below is judging what `debug`
-        // added, not flagging the constructor's own collection-switch call.
-        verify(
-          () => instance.setCrashlyticsCollectionEnabled(enabled),
-        ).called(1);
-
         await adapter.debug('local only', error: StateError('x'));
-        verifyNoMoreInteractions(instance);
+        // Only the constructor's own collection-switch call — debug() added
+        // nothing.
+        expect(client.calls, <String>[
+          'setCrashlyticsCollectionEnabled:$enabled',
+        ]);
       });
 
       test('event — enabled: $enabled', () async {
         final FirebaseCrashlyticsAdapter adapter = FirebaseCrashlyticsAdapter(
-          instance,
+          client,
           enabled: enabled,
         );
-        verify(
-          () => instance.setCrashlyticsCollectionEnabled(enabled),
-        ).called(1);
-
         await adapter.event(
           'opened',
           parameters: <String, Object>{
             'count': 3,
           },
         );
-        verifyNoMoreInteractions(instance);
+        expect(client.calls, <String>[
+          'setCrashlyticsCollectionEnabled:$enabled',
+        ]);
       });
     }
   });
@@ -181,43 +214,27 @@ void main() {
     late FirebaseCrashlyticsAdapter adapter;
 
     setUp(() {
-      adapter = FirebaseCrashlyticsAdapter(instance, enabled: false);
+      adapter = FirebaseCrashlyticsAdapter(client, enabled: false);
     });
 
     test('info', () async {
       await adapter.info('i');
-      verifyNever(() => instance.log(any()));
+      expect(client.calls, <String>['setCrashlyticsCollectionEnabled:false']);
     });
 
     test('warning', () async {
       await adapter.warning('w', error: StateError('x'));
-      verifyNever(() => instance.log(any()));
+      expect(client.calls, <String>['setCrashlyticsCollectionEnabled:false']);
     });
 
     test('error does not record a fault entry', () async {
       await adapter.error('e', error: StateError('x'));
-      verifyNever(
-        () => instance.recordError(
-          any(),
-          any(),
-          reason: any(named: 'reason'),
-          printDetails: any(named: 'printDetails'),
-          fatal: any(named: 'fatal'),
-        ),
-      );
+      expect(client.recordedErrors, isEmpty);
     });
 
     test('fatal does not record a fault entry', () async {
       await adapter.fatal('f', error: StateError('x'));
-      verifyNever(
-        () => instance.recordError(
-          any(),
-          any(),
-          reason: any(named: 'reason'),
-          printDetails: any(named: 'printDetails'),
-          fatal: any(named: 'fatal'),
-        ),
-      );
+      expect(client.recordedErrors, isEmpty);
     });
   });
 
@@ -225,12 +242,12 @@ void main() {
     late FirebaseCrashlyticsAdapter adapter;
 
     setUp(() {
-      adapter = FirebaseCrashlyticsAdapter(instance, enabled: true);
+      adapter = FirebaseCrashlyticsAdapter(client, enabled: true);
     });
 
     test('info is logged as a plain breadcrumb, message verbatim', () async {
       await adapter.info('sync finished');
-      verify(() => instance.log('Info: sync finished')).called(1);
+      expect(client.calls.last, 'log:Info: sync finished');
     });
 
     test(
@@ -238,21 +255,13 @@ void main() {
       'fault',
       () async {
         await adapter.warning('retrying', error: StateError('x'));
-        verifyNever(
-          () => instance.recordError(
-            any(),
-            any(),
-            reason: any(named: 'reason'),
-            printDetails: any(named: 'printDetails'),
-            fatal: any(named: 'fatal'),
-          ),
-        );
+        expect(client.recordedErrors, isEmpty);
       },
     );
 
     test('a warning with no error is just the message', () async {
       await adapter.warning('nothing went wrong yet');
-      verify(() => instance.log('Warning: nothing went wrong yet')).called(1);
+      expect(client.calls.last, 'log:Warning: nothing went wrong yet');
     });
 
     test('a warning\'s error arrives REDACTED, not raw', () async {
@@ -262,11 +271,12 @@ void main() {
       );
       await adapter.warning('load failed', error: error);
 
-      final String logged =
-          verify(() => instance.log(captureAny())).captured.single as String;
-      expect(logged, 'Warning: load failed — FileSystemException errno=-');
-      expect(logged, isNot(contains('private-book')));
-      expect(logged, isNot(contains('/Users')));
+      expect(
+        client.calls.last,
+        'log:Warning: load failed — FileSystemException errno=-',
+      );
+      expect(client.calls.last, isNot(contains('private-book')));
+      expect(client.calls.last, isNot(contains('/Users')));
     });
 
     test(
@@ -274,23 +284,13 @@ void main() {
       () async {
         final StackTrace stack = StackTrace.current;
         await adapter.warning('w', error: StateError('x'), stackTrace: stack);
-
-        final String logged =
-            verify(() => instance.log(captureAny())).captured.single as String;
-        expect(logged, 'Warning: w — StateError\n$stack');
+        expect(client.calls.last, 'log:Warning: w — StateError\n$stack');
       },
     );
 
     test(
       'error records a non-fatal fault entry with the redacted error',
       () async {
-        // Each named argument gets its OWN exact-value matcher rather than a
-        // second `captureAny()`: mocktail's `VerificationResult.captured`
-        // documents only that captures come back in a flat list, not which
-        // position a given named capture lands at, and that order was checked
-        // empirically here to differ from every plausible guess (call-site
-        // order, declaration order, alphabetical). One capture per
-        // verification is unambiguous regardless.
         const FileSystemException error = FileSystemException(
           'could not read',
           '/Users/someone/Library/private-book.epub',
@@ -299,51 +299,39 @@ void main() {
 
         await adapter.error('load failed', error: error, stackTrace: stack);
 
-        final Object redacted = verify(
-          () => instance.recordError(
-            captureAny(),
-            stack,
-            reason: 'load failed',
-            // The console sink already printed at full fidelity; the plugin
-            // printing the redacted surrogate underneath would read like the
-            // error lost its detail.
-            printDetails: false,
-            fatal: false,
-          ),
-        ).captured.single;
-        expect(redacted.toString(), 'FileSystemException errno=-');
-        expect(redacted.toString(), isNot(contains('private-book')));
+        final _RecordedError recorded = client.recordedErrors.single;
+        expect(recorded.exception.toString(), 'FileSystemException errno=-');
+        expect(recorded.exception.toString(), isNot(contains('private-book')));
+        expect(recorded.stackTrace, same(stack));
+        expect(recorded.reason, 'load failed');
+        expect(
+          recorded.printDetails,
+          isFalse,
+          reason:
+              'the console sink already printed at full fidelity; the plugin '
+              'printing the redacted surrogate underneath would read like the '
+              'error lost its detail',
+        );
+        expect(recorded.fatal, isFalse);
       },
     );
 
     test('fatal records the SAME shape, with fatal: true', () async {
       await adapter.fatal('f', error: StateError('x'));
 
-      verify(
-        () => instance.recordError(
-          any(),
-          any(),
-          reason: 'f',
-          printDetails: false,
-          fatal: true,
-        ),
-      ).called(1);
+      final _RecordedError recorded = client.recordedErrors.single;
+      expect(recorded.reason, 'f');
+      expect(recorded.printDetails, isFalse);
+      expect(recorded.fatal, isTrue);
     });
 
     test('no error object on error() still records — reason carries the '
         'message', () async {
       await adapter.error('message only');
 
-      final Object redacted = verify(
-        () => instance.recordError(
-          captureAny(),
-          null,
-          reason: 'message only',
-          printDetails: false,
-          fatal: false,
-        ),
-      ).captured.single;
-      expect(redacted.toString(), '<no error object>');
+      final _RecordedError recorded = client.recordedErrors.single;
+      expect(recorded.exception.toString(), '<no error object>');
+      expect(recorded.stackTrace, isNull);
     });
   });
 }

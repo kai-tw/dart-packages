@@ -24,8 +24,13 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
-  # For `MockFirebaseCrashlytics extends Mock implements FirebaseCrashlytics`.
+  # Scoped to one file: firebase_crashlytics_client_test.dart's
+  # `_MockFirebaseCrashlytics extends Mock implements FirebaseCrashlytics`.
   # `FirebaseCrashlytics` has a private constructor, so a hand-written fake
   # cannot `extends` it; `Mock`'s `implements` + `noSuchMethod` sidesteps the
   # constructor entirely, which is the one thing a hand-written fake cannot.
+  # Every other test in this package — including the crash-reporter adapter
+  # itself — uses a hand-written fake against a contract this package owns;
+  # see `FirebaseCrashlyticsClient`'s doc comment for why this one file is
+  # different.
   mocktail: ^1.0.4
