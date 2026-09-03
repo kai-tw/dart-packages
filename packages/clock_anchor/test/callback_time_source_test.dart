@@ -13,7 +13,7 @@ void main() {
   late MutableWallClock device;
 
   setUp(() {
-    ticks = FakeMonotonicTicks();
+    ticks = FakeMonotonicTicks(const Duration(minutes: 7));
     device = MutableWallClock(DateTime.utc(2026, 9, 1));
   });
 
@@ -45,7 +45,10 @@ void main() {
         serverTime.add(const Duration(milliseconds: 150)),
       );
       expect(sample.uncertainty, const Duration(milliseconds: 150));
-      expect(sample.ticksAtReceipt, const Duration(milliseconds: 300));
+      expect(
+        sample.ticksAtReceipt,
+        const Duration(minutes: 7, milliseconds: 300),
+      );
       expect(sample.sourceId, 'firestore');
     },
   );

@@ -168,4 +168,23 @@ void main() {
       expect(NtpPacket.parse(bytes)?.kissCode, isEmpty);
     });
   });
+
+  group('kiss code bounds', () {
+    test('A and Z, the ends of the accepted range, are letters', () {
+      expect(
+        NtpPacket.parse(replyBytes(stratum: 0, kiss: 'AZZA'))?.kissCode,
+        'AZZA',
+      );
+    });
+
+    test('the character just past each end is not', () {
+      final Uint8List belowA = replyBytes(stratum: 0, kiss: 'RATE');
+      belowA[12] = 0x40;
+      expect(NtpPacket.parse(belowA)?.kissCode, isEmpty);
+
+      final Uint8List pastZ = replyBytes(stratum: 0, kiss: 'RATE');
+      pastZ[15] = 0x5B;
+      expect(NtpPacket.parse(pastZ)?.kissCode, isEmpty);
+    });
+  });
 }

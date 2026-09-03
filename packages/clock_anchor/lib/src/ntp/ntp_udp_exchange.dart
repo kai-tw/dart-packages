@@ -11,7 +11,14 @@ import 'ntp_exchange.dart';
 /// seam, so those decisions can be tested without a socket.
 class NtpUdpExchange implements NtpExchange {
   /// Binds an ephemeral port per exchange; there is no long-lived socket.
-  const NtpUdpExchange();
+  ///
+  /// [resolve] is a seam for the same reason [NtpExchange] itself is one:
+  /// without it, the branch where a host resolves to nothing is unreachable
+  /// from a test and would ship unexercised.
+  const NtpUdpExchange({this.resolve = InternetAddress.lookup});
+
+  /// Resolves a host name to addresses. Defaults to the platform resolver.
+  final Future<List<InternetAddress>> Function(String host) resolve;
 
   @override
   Future<Uint8List> exchange(
@@ -20,7 +27,7 @@ class NtpUdpExchange implements NtpExchange {
     required int port,
     required Duration timeout,
   }) async {
-    final List<InternetAddress> addresses = await InternetAddress.lookup(host);
+    final List<InternetAddress> addresses = await resolve(host);
     if (addresses.isEmpty) {
       throw const SocketException('no address resolved for NTP host');
     }

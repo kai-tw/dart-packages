@@ -13,7 +13,7 @@ void main() {
   late MutableWallClock device;
 
   setUp(() {
-    ticks = FakeMonotonicTicks();
+    ticks = FakeMonotonicTicks(const Duration(minutes: 7));
     device = MutableWallClock(DateTime.utc(2026, 9, 1));
   });
 
@@ -166,5 +166,54 @@ void main() {
         }
       },
     );
+  });
+
+  group('field bounds', () {
+    test('the low end of every field is accepted', () {
+      // Zero is a legal second and a legal minute; rejecting it would be an
+      // off-by-one in the guard rather than in the format.
+      expect(
+        HttpDateTimeSource.parseHttpDate('Thu, 01 Jan 2026 00:00:00 GMT'),
+        DateTime.utc(2026),
+      );
+    });
+
+    test('the high end of every field is accepted', () {
+      expect(
+        HttpDateTimeSource.parseHttpDate('Thu, 31 Dec 2026 23:59:59 GMT'),
+        DateTime.utc(2026, 12, 31, 23, 59, 59),
+      );
+    });
+
+    test('a zero year or a zero day is malformed', () {
+      expect(
+        HttpDateTimeSource.parseHttpDate('Sun, 06 Nov 0000 08:49:37 GMT'),
+        isNull,
+      );
+      expect(
+        HttpDateTimeSource.parseHttpDate('Sun, 00 Nov 2026 08:49:37 GMT'),
+        isNull,
+      );
+    });
+  });
+
+  group('year bounds', () {
+    test('the two-digit year 00 is 2000, not a rejection', () {
+      expect(
+        HttpDateTimeSource.parseHttpDate('Sunday, 06-Nov-00 08:49:37 GMT'),
+        DateTime.utc(2000, 11, 6, 8, 49, 37),
+      );
+    });
+
+    test('the first and last years DateTime can express are accepted', () {
+      expect(
+        HttpDateTimeSource.parseHttpDate('Mon, 06 Nov 0001 08:49:37 GMT'),
+        DateTime.utc(1, 11, 6, 8, 49, 37),
+      );
+      expect(
+        HttpDateTimeSource.parseHttpDate('Mon, 06 Nov 9999 08:49:37 GMT'),
+        DateTime.utc(9999, 11, 6, 8, 49, 37),
+      );
+    });
   });
 }

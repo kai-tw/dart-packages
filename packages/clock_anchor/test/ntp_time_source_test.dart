@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:clock_anchor/clock_anchor.dart';
@@ -23,7 +24,7 @@ void main() {
   late MutableWallClock device;
 
   setUp(() {
-    ticks = FakeMonotonicTicks();
+    ticks = FakeMonotonicTicks(const Duration(minutes: 7));
     device = MutableWallClock(DateTime.utc(2026, 9, 1));
   });
 
@@ -122,7 +123,10 @@ void main() {
           serverTime.add(const Duration(milliseconds: 40)),
         );
         expect(sample.uncertainty, const Duration(milliseconds: 40));
-        expect(sample.ticksAtReceipt, const Duration(milliseconds: 80));
+        expect(
+          sample.ticksAtReceipt,
+          const Duration(minutes: 7, milliseconds: 80),
+        );
         expect(sample.trust, TimeSourceTrust.unauthenticated);
       },
     );
@@ -265,6 +269,73 @@ void main() {
         expect(error.toString(), isNot(contains('[')));
         expect(error.reason, 'stratum 16 is unusable');
       }
+    });
+  });
+
+  group('constructor defaults are defaults, not hard-coded values', () {
+    test('an injected random is what produces the nonce', () async {
+      // Not decoration: the nonce is the anti-spoofing echo, and a source
+      // that ignored its injected generator would be untestable for it.
+      final Random seeded = Random(20260903);
+      final int firstNonce = seeded.nextInt(0x100000000);
+      final int secondNonce = seeded.nextInt(0x100000000);
+
+      final ScriptedNtpExchange exchange = ScriptedNtpExchange(replyTo);
+      await NtpTimeSource(
+        ticks: ticks,
+        exchange: exchange,
+        deviceClock: device.clock,
+        random: Random(20260903),
+      ).sample();
+
+      final NtpPacket? sent = NtpPacket.parse(
+        exchange.lastRequest ?? Uint8List(0),
+      );
+      expect(sent?.transmitSeconds, firstNonce);
+      expect(sent?.transmitFraction, secondNonce);
+    });
+
+    test('an injected plausible window overrides the default', () async {
+      // 2021 is inside the default window and outside this one, so only a
+      // source that actually reads the injected value rejects it.
+      await expectLater(
+        buildSource(
+          (Uint8List request) =>
+              replyTo(request, transmit: DateTime.utc(2021, 5, 5)),
+          plausibleFrom: DateTime.utc(2026),
+        ).sample(),
+        throwsA(isA<NtpQueryException>()),
+      );
+
+      await expectLater(
+        buildSource(
+          (Uint8List request) =>
+              replyTo(request, transmit: DateTime.utc(2030, 5, 5)),
+          plausibleUntil: DateTime.utc(2027),
+        ).sample(),
+        throwsA(isA<NtpQueryException>()),
+      );
+    });
+
+    test('with no window given, the defaults still bound the reply', () async {
+      await expectLater(
+        NtpTimeSource(
+          ticks: ticks,
+          exchange: ScriptedNtpExchange(
+            (Uint8List request) =>
+                replyTo(request, transmit: DateTime.utc(1971, 2, 3)),
+          ),
+          deviceClock: device.clock,
+        ).sample(),
+        throwsA(isA<NtpQueryException>()),
+      );
+
+      final TimeSample sample = await NtpTimeSource(
+        ticks: ticks,
+        exchange: ScriptedNtpExchange(replyTo),
+        deviceClock: device.clock,
+      ).sample();
+      expect(sample.remoteUtc, serverTime);
     });
   });
 }

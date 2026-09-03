@@ -237,4 +237,143 @@ void main() {
       expect(store.writes, hasLength(writesBefore));
     });
   });
+
+  group('thresholds', () {
+    test('a jump exactly at the tolerance is not yet a jump', () async {
+      final ClockIntegrity integrity = ClockIntegrity(
+        store: RecordingWatermarkStore(),
+        tolerance: const Duration(seconds: 5),
+      );
+      await integrity.load();
+      await integrity.observe(trueNow);
+
+      final ClockIntegrityReport atLimit = await integrity.observe(
+        trueNow.add(const Duration(minutes: 1, seconds: 5)),
+        monotonicAdvance: const Duration(minutes: 1),
+      );
+      expect(atLimit.verdict, ClockIntegrityVerdict.intact);
+
+      final ClockIntegrityReport past = await integrity.observe(
+        trueNow.add(const Duration(minutes: 2, seconds: 11)),
+        monotonicAdvance: const Duration(minutes: 1),
+      );
+      expect(past.verdict, ClockIntegrityVerdict.advanced);
+    });
+
+    test('a reading inside the tolerance never lowers the watermark', () async {
+      final ClockIntegrity integrity = ClockIntegrity(
+        store: RecordingWatermarkStore(),
+        tolerance: const Duration(seconds: 5),
+      );
+      await integrity.load();
+      await integrity.observe(trueNow);
+
+      // Below the mark but inside the tolerance: not a rollback, and the
+      // watermark is a high-water mark, so it does not follow the reading
+      // down either.
+      final ClockIntegrityReport report = await integrity.observe(
+        trueNow.subtract(const Duration(seconds: 2)),
+      );
+
+      expect(report.verdict, ClockIntegrityVerdict.intact);
+      expect(integrity.watermark, trueNow);
+    });
+
+    test('a persisted watermark counts as already written', () async {
+      // Loading must remember that the stored value is on disk. Treating it
+      // as unwritten makes the very next observation write again, which
+      // defeats the granularity entirely.
+      final RecordingWatermarkStore store = RecordingWatermarkStore(trueNow);
+      final ClockIntegrity integrity = ClockIntegrity(
+        store: store,
+        persistGranularity: const Duration(minutes: 5),
+      );
+      await integrity.load();
+
+      await integrity.observe(
+        trueNow.add(const Duration(minutes: 1)),
+        monotonicAdvance: const Duration(minutes: 1),
+      );
+
+      expect(store.writes, isEmpty);
+      expect(integrity.watermark, trueNow.add(const Duration(minutes: 1)));
+    });
+
+    test('a rise exactly at the granularity is persisted', () async {
+      final RecordingWatermarkStore store = RecordingWatermarkStore(trueNow);
+      final ClockIntegrity integrity = ClockIntegrity(
+        store: store,
+        persistGranularity: const Duration(minutes: 5),
+      );
+      await integrity.load();
+
+      await integrity.observe(
+        trueNow.add(const Duration(minutes: 5)),
+        monotonicAdvance: const Duration(minutes: 5),
+      );
+
+      expect(store.writes, hasLength(1));
+    });
+
+    test('vindication is inclusive at the tolerance', () async {
+      final ClockIntegrity integrity = ClockIntegrity(
+        store: RecordingWatermarkStore(),
+        tolerance: const Duration(seconds: 5),
+      );
+      await integrity.load();
+      await integrity.observe(trueNow);
+      await integrity.observe(trueNow.subtract(const Duration(hours: 1)));
+      expect(integrity.isRolledBack, isTrue);
+
+      await integrity.reconcile(
+        anchorAt(trueNow),
+        Duration.zero,
+        trueNow.subtract(const Duration(seconds: 5)),
+      );
+      expect(integrity.isRolledBack, isFalse);
+    });
+
+    test('a watermark exactly at the tolerance is not pulled down', () async {
+      final RecordingWatermarkStore store = RecordingWatermarkStore();
+      final ClockIntegrity integrity = ClockIntegrity(
+        store: store,
+        tolerance: const Duration(seconds: 5),
+      );
+      await integrity.load();
+      await integrity.observe(trueNow.add(const Duration(seconds: 5)));
+
+      expect(
+        await integrity.reconcile(anchorAt(trueNow), Duration.zero, trueNow),
+        isFalse,
+      );
+      expect(integrity.watermark, trueNow.add(const Duration(seconds: 5)));
+
+      await integrity.observe(trueNow.add(const Duration(seconds: 11)));
+      expect(
+        await integrity.reconcile(anchorAt(trueNow), Duration.zero, trueNow),
+        isTrue,
+      );
+      expect(integrity.watermark, trueNow);
+    });
+
+    test('a correction is remembered as written', () async {
+      final RecordingWatermarkStore store = RecordingWatermarkStore();
+      final ClockIntegrity integrity = ClockIntegrity(
+        store: store,
+        persistGranularity: const Duration(minutes: 5),
+      );
+      await integrity.load();
+      await integrity.observe(trueNow.add(const Duration(days: 3)));
+      await integrity.reconcile(anchorAt(trueNow), Duration.zero, trueNow);
+      final int afterCorrection = store.writes.length;
+
+      // Past the granularity measured from the CORRECTED value. Measured
+      // from the stale pre-correction one it would still look like a
+      // backwards step and write nothing.
+      await integrity.observe(trueNow.add(const Duration(minutes: 6)));
+
+      expect(store.writes, hasLength(afterCorrection + 1));
+      expect(store.writes.last, trueNow.add(const Duration(minutes: 6)));
+    });
+  });
 }

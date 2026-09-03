@@ -373,4 +373,282 @@ void main() {
       },
     );
   });
+
+  group('thresholds are inclusive on the safe side', () {
+    test('a sample exactly at the width limit is still usable', () {
+      final ClockAnchorService service = buildService(
+        policy: const ClockAnchorPolicy(
+          maxSampleUncertainty: Duration(seconds: 1),
+        ),
+      );
+
+      expect(
+        service.observe(
+          sampleOf(trueStart, uncertainty: const Duration(seconds: 1)),
+        ),
+        isTrue,
+      );
+      expect(
+        service.observe(
+          sampleOf(
+            trueStart,
+            uncertainty: const Duration(seconds: 1, microseconds: 1),
+          ),
+        ),
+        isFalse,
+      );
+    });
+
+    test('an anchor exactly at the age limit is not yet stale', () {
+      final ClockAnchorService service = buildService(
+        policy: const ClockAnchorPolicy(maxAnchorAge: Duration(hours: 1)),
+      );
+      service.observe(sampleOf(trueStart));
+
+      ticks.advance(const Duration(hours: 1));
+      device.now = trueStart.add(const Duration(hours: 1));
+      expect(service.read().confidence, TimeConfidence.anchored);
+
+      ticks.advance(const Duration(microseconds: 1));
+      device.now = trueStart.add(const Duration(hours: 1, microseconds: 1));
+      expect(service.read().confidence, TimeConfidence.staleAnchor);
+    });
+
+    test('a forward drift exactly at the limit is not yet stale', () {
+      final ClockAnchorService service = buildService(
+        policy: const ClockAnchorPolicy(maxDiscrepancy: Duration(seconds: 30)),
+      );
+      service.observe(sampleOf(trueStart));
+
+      device.now = trueStart.add(const Duration(seconds: 30));
+      expect(service.read().confidence, TimeConfidence.anchored);
+
+      device.now = trueStart.add(const Duration(seconds: 30, microseconds: 1));
+      expect(service.read().confidence, TimeConfidence.staleAnchor);
+    });
+
+    test('at equal trust, matching the anchor precision exactly is enough', () {
+      final ClockAnchorService service = buildService();
+      service.observe(
+        sampleOf(trueStart, uncertainty: const Duration(seconds: 2)),
+      );
+
+      expect(
+        service.observe(
+          sampleOf(trueStart, uncertainty: const Duration(seconds: 2)),
+        ),
+        isTrue,
+      );
+      expect(
+        service.observe(
+          sampleOf(
+            trueStart,
+            uncertainty: const Duration(seconds: 2, microseconds: 1),
+          ),
+        ),
+        isFalse,
+      );
+    });
+
+    test('a stronger source is adopted even when it is less precise', () {
+      final ClockAnchorService service = buildService();
+      service.observe(
+        sampleOf(trueStart, trust: TimeSourceTrust.transportAuthenticated),
+      );
+
+      // Precision is only a tie-breaker between equals. A better-attested
+      // source wins on attestation, which is the property being ranked.
+      expect(
+        service.observe(
+          sampleOf(
+            trueStart,
+            trust: TimeSourceTrust.serverAttested,
+            uncertainty: const Duration(seconds: 5),
+          ),
+        ),
+        isTrue,
+      );
+      expect(service.anchor?.trust, TimeSourceTrust.serverAttested);
+    });
+  });
+
+  group('refresh wiring', () {
+    test('reports how many samples were adopted', () async {
+      final ClockAnchorService service = buildService(
+        sources: <TimeSource>[
+          ScriptedTimeSource(
+            id: 'a',
+            trust: TimeSourceTrust.serverAttested,
+            script: <Object>[sampleOf(trueStart, sourceId: 'a')],
+          ),
+        ],
+      );
+
+      expect(await service.refresh(), 1);
+    });
+
+    test('failures from an earlier refresh do not linger', () async {
+      final ClockAnchorService service = buildService(
+        sources: <TimeSource>[
+          ScriptedTimeSource(
+            id: 'a',
+            trust: TimeSourceTrust.serverAttested,
+            script: <Object>[
+              const TimeSourceException('a', 'offline'),
+              sampleOf(trueStart, sourceId: 'a'),
+            ],
+          ),
+        ],
+      );
+
+      await service.refresh();
+      expect(service.lastRefreshFailures, hasLength(1));
+
+      await service.refresh();
+      expect(service.lastRefreshFailures, isEmpty);
+    });
+
+    test(
+      'a successful refresh reconciles a watermark left in the future',
+      () async {
+        // The end-to-end recovery path: the watermark is only pulled back down
+        // because refresh calls reconcile. Nothing else does.
+        final ClockAnchorService probe = buildService();
+        device.now = trueStart.add(const Duration(days: 3));
+        await probe.checkIntegrity();
+        device.now = trueStart;
+        await probe.checkIntegrity();
+        expect(integrity.isRolledBack, isTrue);
+
+        final ClockAnchorService service = buildService(
+          sources: <TimeSource>[
+            ScriptedTimeSource(
+              id: 'firestore',
+              trust: TimeSourceTrust.serverAttested,
+              script: <Object>[sampleOf(trueStart, sourceId: 'firestore')],
+            ),
+          ],
+        );
+
+        expect(await service.refresh(), 1);
+        expect(integrity.watermark, trueStart);
+        expect(integrity.isRolledBack, isFalse);
+      },
+    );
+
+    test(
+      'integrity is told the advance since the last check, not since boot',
+      () async {
+        final ClockAnchorService service = buildService();
+
+        await service.checkIntegrity();
+        ticks.advance(const Duration(minutes: 30));
+        device.now = trueStart.add(const Duration(minutes: 30));
+        await service.checkIntegrity();
+
+        ticks.advance(const Duration(minutes: 1));
+        device.now = trueStart.add(const Duration(minutes: 90));
+        final ClockIntegrityReport report = await service.checkIntegrity();
+
+        // One minute of monotonic time against an hour of wall movement is a
+        // 59-minute jump. Carrying the whole 31 minutes since the first check
+        // would report 29, and adding instead of subtracting would report no
+        // jump at all — both are the same statement being got wrong.
+        expect(report.verdict, ClockIntegrityVerdict.advanced);
+        expect(report.delta, const Duration(minutes: 59));
+      },
+    );
+  });
+
+  group('the staleness limits gate adoption too, on the same boundary', () {
+    test(
+      'an anchor exactly at the age limit still refuses a weaker source',
+      () {
+        final ClockAnchorService service = buildService(
+          policy: const ClockAnchorPolicy(maxAnchorAge: Duration(hours: 6)),
+        );
+        service.observe(sampleOf(trueStart));
+
+        ticks.advance(const Duration(hours: 6));
+        device.now = trueStart.add(const Duration(hours: 6));
+
+        // Not yet stale, so the trust rule still applies. One microsecond
+        // later it is stale and anything goes — which is the point of pinning
+        // the boundary from both sides.
+        expect(
+          service.observe(
+            sampleOf(
+              trueStart.add(const Duration(hours: 6)),
+              trust: TimeSourceTrust.unauthenticated,
+            ),
+          ),
+          isFalse,
+        );
+
+        ticks.advance(const Duration(microseconds: 1));
+        device.now = trueStart.add(const Duration(hours: 6, microseconds: 1));
+        expect(
+          service.observe(
+            sampleOf(
+              trueStart.add(const Duration(hours: 6)),
+              trust: TimeSourceTrust.unauthenticated,
+            ),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('a drift exactly at the limit still refuses a weaker source', () {
+      final ClockAnchorService service = buildService(
+        policy: const ClockAnchorPolicy(maxDiscrepancy: Duration(seconds: 30)),
+      );
+      service.observe(sampleOf(trueStart));
+
+      device.now = trueStart.add(const Duration(seconds: 30));
+      expect(
+        service.observe(
+          sampleOf(trueStart, trust: TimeSourceTrust.unauthenticated),
+        ),
+        isFalse,
+      );
+
+      device.now = trueStart.add(const Duration(seconds: 30, microseconds: 1));
+      expect(
+        service.observe(
+          sampleOf(trueStart, trust: TimeSourceTrust.unauthenticated),
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'a refresh that adopts nothing does not touch the watermark',
+      () async {
+        final ClockAnchorService service = buildService(
+          sources: <TimeSource>[
+            ScriptedTimeSource(
+              id: 'firestore',
+              trust: TimeSourceTrust.serverAttested,
+              script: <Object>[
+                const TimeSourceException('firestore', 'offline'),
+              ],
+            ),
+          ],
+        );
+        service.observe(sampleOf(trueStart));
+
+        device.now = trueStart.add(const Duration(days: 3));
+        await service.checkIntegrity();
+        device.now = trueStart;
+
+        expect(await service.refresh(), 0);
+
+        // Reconciling on a round that learned nothing would let an offline
+        // refresh silently rewrite the anti-rollback floor from an anchor that
+        // may itself be hours old.
+        expect(integrity.watermark, trueStart.add(const Duration(days: 3)));
+      },
+    );
+  });
 }
