@@ -6,6 +6,7 @@ import 'data/adapters/firebase_crashlytics_adapter.dart';
 import 'data/adapters/firebase_crashlytics_client.dart';
 import 'data/adapters/log_error_redactor.dart';
 import 'data/adapters/logger_adapter.dart';
+import 'data/log_data_source.dart';
 import 'data/log_repository_impl.dart';
 import 'domain/log_repository.dart';
 import 'domain/log_sink.dart';
@@ -175,33 +176,24 @@ class LogSystem {
         // `reportCrashes: false` would leave the SDK default — on — and the
         // native layer captures a crash with no Dart code involved, so the
         // build that most wanted silence would be the one still reporting.
-        //
-        // coverage:ignore-start
-        // `FirebaseCrashlytics.instance` resolves a real plugin singleton:
-        // reaching it needs a registered `FirebaseCrashlyticsPlatform`, which
-        // in a pure-Dart test binary fails an internal plugin assertion
-        // (`pluginConstants['isCrashlyticsCollectionEnabled'] != null`) the
-        // moment `FirebaseCrashlyticsClient.wrapping`'s result is first used
-        // — before this package's own code runs at all. Faking that safely
-        // means mocking `FirebaseCrashlyticsPlatform.instanceFor`, a surface
-        // this package does not own, for three lines that only choose which
-        // already-tested constructor argument to pass.
-        // `FirebaseCrashlyticsAdapter` itself — every method, the enabled
-        // gate, the custom-key wiring — is fully covered directly, against a
-        // hand-written fake `FirebaseCrashlyticsClient`; the thin real
-        // wrapper this line builds is covered separately, against a mocked
-        // `FirebaseCrashlytics` — see both types' own doc comments.
-        report: hasFirebase
-            ? FirebaseCrashlyticsAdapter(
-                FirebaseCrashlyticsClient.wrapping(
-                  FirebaseCrashlytics.instance,
-                ),
-                enabled: reportCrashes && kReleaseMode,
-                customKeys: customKeys,
-                deferredCustomKeys: deferredCustomKeys,
-              )
-            : null,
-        // coverage:ignore-end
+        report: buildCrashlyticsReportForTest(
+          hasFirebase: hasFirebase,
+          reportCrashes: reportCrashes,
+          customKeys: customKeys,
+          deferredCustomKeys: deferredCustomKeys,
+          // coverage:ignore-start
+          // `FirebaseCrashlytics.instance` resolves a real plugin singleton:
+          // reaching it needs a registered `FirebaseCrashlyticsPlatform`,
+          // which in a pure-Dart test binary fails an internal plugin
+          // assertion (`pluginConstants['isCrashlyticsCollectionEnabled'] !=
+          // null`) the moment anything calls a method on the client this
+          // builds — see `buildCrashlyticsReportForTest`'s own doc for why
+          // that assertion is structurally unreachable from here, and for
+          // everything this one line is not responsible for proving.
+          clientFactory: () =>
+              FirebaseCrashlyticsClient.wrapping(FirebaseCrashlytics.instance),
+          // coverage:ignore-end
+        ),
       ),
     );
 
@@ -216,6 +208,63 @@ class LogSystem {
         'log: no Firebase app, so nothing will be reported — console only',
       );
     }
+  }
+
+  /// The decision [init] makes for the crash-reporter destination —
+  /// extracted for the same reason [handleFrameworkErrorForTest] is: so this
+  /// package's own tests can reach it directly, with [clientFactory] standing
+  /// in for the one call [init] cannot make under `flutter test`.
+  ///
+  /// This is not the `LogRepository` seam this package's `CLAUDE.md` refuses
+  /// to open. That refusal is about exposing *which internal destination a
+  /// level reached* — the graph a caller could wire wrong. This exposes
+  /// *whether and how the report destination gets built* for one already-
+  /// public constructor ([FirebaseCrashlyticsAdapter]) — the same shape as
+  /// injecting a collaborator, not as widening what a level can reach.
+  ///
+  /// Splitting the seam here, at [clientFactory], rather than one level up at
+  /// `report:` itself, is deliberate: `hasFirebase`, `reportCrashes &&
+  /// kReleaseMode`, and forwarding `customKeys`/`deferredCustomKeys` are this
+  /// method's own logic, not the SDK's, and a test exercising them should not
+  /// have to stand up a fake `FirebaseCrashlyticsPlatform` to do it — [init]
+  /// passes a fake [FirebaseCrashlyticsClient] instead, no different from how
+  /// `firebase_crashlytics_adapter_test.dart` tests
+  /// [FirebaseCrashlyticsAdapter] itself.
+  ///
+  /// What stays genuinely out of reach is narrower than it looks: not
+  /// "anything Firebase", just the one thing [clientFactory] wraps at its own
+  /// call site in [init] — a *method call* on the real
+  /// `FirebaseCrashlytics.instance`. Reading `Firebase.apps` (what
+  /// `hasFirebase` is) is a plain, swappable object graph and is exercised
+  /// for real below with a fake `FirebasePlatform`; even
+  /// `FirebaseCrashlytics.instance` itself resolves safely against that same
+  /// fake, since the getter only wraps a `FirebaseApp` reference. The wall is
+  /// one field deeper: `FirebaseCrashlyticsPlatform.instanceFor` — reached the
+  /// moment any method is called on that client — asserts
+  /// `pluginConstants['isCrashlyticsCollectionEnabled'] != null`, and
+  /// `pluginConstants` reads a `static` field private to
+  /// `firebase_core_platform_interface` that only the real native
+  /// `Firebase#initializeCore` channel response ever populates. No object
+  /// substitution reaches a private field in a package this one does not
+  /// own; only re-implementing that plugin's own native handshake would, and
+  /// that is testing the SDK, not this package.
+  @visibleForTesting
+  static LogDataSource? buildCrashlyticsReportForTest({
+    required bool hasFirebase,
+    required bool reportCrashes,
+    required Map<String, String> customKeys,
+    required Future<Map<String, String>> Function()? deferredCustomKeys,
+    required FirebaseCrashlyticsClient Function() clientFactory,
+  }) {
+    if (!hasFirebase) {
+      return null;
+    }
+    return FirebaseCrashlyticsAdapter(
+      clientFactory(),
+      enabled: reportCrashes && kReleaseMode,
+      customKeys: customKeys,
+      deferredCustomKeys: deferredCustomKeys,
+    );
   }
 
   /// The two handlers every uncaught throw arrives at, wired once here so two

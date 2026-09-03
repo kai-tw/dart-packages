@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:log_system/log_system.dart';
 // Not exported. A host app configures via flags on `LogSystem.init`; these are
 // the internals those flags assemble, reachable from inside the package only.
+import 'package:log_system/src/data/adapters/firebase_crashlytics_adapter.dart';
+import 'package:log_system/src/data/adapters/firebase_crashlytics_client.dart';
 import 'package:log_system/src/data/adapters/log_error_redactor.dart';
 import 'package:log_system/src/data/log_data_source.dart';
 import 'package:log_system/src/data/log_repository_impl.dart';
@@ -16,6 +18,31 @@ final class _RecordingLogSink implements LogSink {
 
   @override
   void emit(LogEntry entry) => entries.add(entry);
+}
+
+/// Stands in for the real SDK in `buildCrashlyticsReportForTest` tests. Every
+/// method just resolves — `FirebaseCrashlyticsAdapter`'s own behaviour against
+/// a client is `firebase_crashlytics_adapter_test.dart`'s job; this file only
+/// needs proof that *a* client reaches the adapter's constructor, not that its
+/// calls are recorded correctly.
+class _StubFirebaseCrashlyticsClient implements FirebaseCrashlyticsClient {
+  @override
+  Future<void> setCrashlyticsCollectionEnabled(bool enabled) async {}
+
+  @override
+  Future<void> setCustomKey(String key, Object value) async {}
+
+  @override
+  Future<void> log(String message) async {}
+
+  @override
+  Future<void> recordError(
+    Object exception,
+    StackTrace? stackTrace, {
+    required String? reason,
+    required bool printDetails,
+    required bool fatal,
+  }) async {}
 }
 
 /// Records what each level was asked to do, without touching a real sink.
@@ -320,4 +347,88 @@ void main() {
       );
     });
   });
+
+  group(
+    'buildCrashlyticsReportForTest — the decision init makes for the '
+    'report destination',
+    () {
+      test('no Firebase: null, and the client factory is never called', () {
+        int factoryCalls = 0;
+
+        final LogDataSource? result = LogSystem.buildCrashlyticsReportForTest(
+          hasFirebase: false,
+          reportCrashes: true,
+          customKeys: const <String, String>{},
+          deferredCustomKeys: null,
+          clientFactory: () {
+            factoryCalls++;
+            return _StubFirebaseCrashlyticsClient();
+          },
+        );
+
+        expect(result, isNull);
+        expect(
+          factoryCalls,
+          0,
+          reason:
+              'no Firebase app means nothing should ever touch the real SDK',
+        );
+      });
+
+      test(
+        'Firebase present: builds a real FirebaseCrashlyticsAdapter, calling '
+        'the factory exactly once',
+        () {
+          int factoryCalls = 0;
+
+          final LogDataSource? result = LogSystem.buildCrashlyticsReportForTest(
+            hasFirebase: true,
+            reportCrashes: true,
+            customKeys: const <String, String>{},
+            deferredCustomKeys: null,
+            clientFactory: () {
+              factoryCalls++;
+              return _StubFirebaseCrashlyticsClient();
+            },
+          );
+
+          expect(result, isA<FirebaseCrashlyticsAdapter>());
+          expect(factoryCalls, 1);
+        },
+      );
+
+      test(
+        'enabled is reportCrashes && kReleaseMode, not reportCrashes || '
+        'kReleaseMode — both read false under flutter test, so only && '
+        'agrees with reportCrashes: true',
+        () {
+          final FirebaseCrashlyticsAdapter result =
+              LogSystem.buildCrashlyticsReportForTest(
+                    hasFirebase: true,
+                    reportCrashes: true,
+                    customKeys: const <String, String>{},
+                    deferredCustomKeys: null,
+                    clientFactory: _StubFirebaseCrashlyticsClient.new,
+                  )
+                  as FirebaseCrashlyticsAdapter;
+
+          expect(result.enabled, isFalse);
+        },
+      );
+
+      test('reportCrashes: false also switches collection off', () {
+        final FirebaseCrashlyticsAdapter result =
+            LogSystem.buildCrashlyticsReportForTest(
+                  hasFirebase: true,
+                  reportCrashes: false,
+                  customKeys: const <String, String>{},
+                  deferredCustomKeys: null,
+                  clientFactory: _StubFirebaseCrashlyticsClient.new,
+                )
+                as FirebaseCrashlyticsAdapter;
+
+        expect(result.enabled, isFalse);
+      });
+    },
+  );
 }

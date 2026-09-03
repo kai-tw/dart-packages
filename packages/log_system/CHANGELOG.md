@@ -26,6 +26,25 @@ mocks `FirebaseCrashlytics` to prove `wrapping`'s delegation itself is
 correct, which is the one remaining place in this package worth testing
 against the real SDK type.
 
+**A second seam, `LogSystem.buildCrashlyticsReportForTest`, does the same for
+`init`'s own decision about that destination** — `hasFirebase ? construct :
+null`, `enabled: reportCrashes && kReleaseMode`, and forwarding `customKeys`/
+`deferredCustomKeys` — extracted so a test supplies the client the same way
+`firebase_crashlytics_adapter_test.dart` does, rather than needing a real
+`FirebaseCrashlytics.instance` to reach it. This replaced a `// coverage:ignore`
+block that was wider than the actual problem: `Firebase.apps` and even
+`FirebaseCrashlytics.instance` itself are genuinely fakeable in a pure-Dart
+test (`Firebase.delegatePackingProperty` is `@visibleForTesting` for exactly
+this), so the *decision logic* had no real excuse to stay untested — only
+tracing the SDK source turned that up. What is left behind, at the one call
+site `init` now has for it, is narrower and precise: the instant any *method*
+is called on the client, `FirebaseCrashlyticsPlatform.instanceFor` asserts
+`pluginConstants['isCrashlyticsCollectionEnabled'] != null`, and
+`pluginConstants` reads a field private to `firebase_core_platform_interface`
+that only a real native `Firebase#initializeCore` round-trip populates — no
+object substitution reaches a private field in a package this one does not
+own. See `buildCrashlyticsReportForTest`'s own doc for the full trace.
+
 Two internals gained a narrow, additive seam so this package's own tests can
 reach logic that was previously sealed behind `kReleaseMode` — a compile-time
 constant, always false under `flutter test`, so no test can flip it:
@@ -51,19 +70,25 @@ constant, always false under `flutter test`, so no test can flip it:
 exposes which internal destination a level reached, and the redaction
 boundary still reduces at exactly its two existing sites and nowhere else.
 
-Line coverage 100% (220/220, `--check-ignore`); mutation 94.4% (119/126,
-`dart_mutants`, 106 tests) — the same score as before the `FirebaseCrashlyticsClient`
-split, because the delegation `wrapping` moved into its own file is pure
-single-expression forwarding (`Future<void> log(String message) =>
-_instance.log(message);` and three siblings shaped the same way): no
-`Block` body for `statement_deletion` to target, no operator, ternary, `??`
-or `switch` for anything else in this tool's operator set to touch, so the
-file scores `0/0` mutants — correctly, not as a gap. What proves that file
+Line coverage 100% (224/224, `--check-ignore`); mutation 95.3% (123/129,
+`dart_mutants`, 110 tests).
+
+`firebase_crashlytics_client.dart` scores `0/0` mutants, correctly rather than
+as a gap: `wrapping`'s delegation is pure single-expression forwarding
+(`Future<void> log(String message) => _instance.log(message);` and three
+siblings shaped the same way), so there is no `Block` body for
+`statement_deletion` to target and no operator, ternary, `??` or `switch` for
+anything else in this tool's operator set to touch. What proves that file
 right is the explicit `verify()` in `firebase_crashlytics_client_test.dart`,
-not mutation testing; the two tools are covering different questions here,
+not mutation testing — the two tools are answering different questions here,
 not duplicating one.
 
-The 7 survivors, individually accounted for:
+The remaining 6 survivors, individually accounted for, are all one family —
+code gated on `kReleaseMode`, a genuine Dart compile-time constant
+(`bool.fromEnvironment('dart.vm.product')`, inlined at compile time —
+structurally different from a runtime object graph like `Firebase.apps`,
+which is why that one no longer appears here) — plus one pre-existing,
+unrelated equivalent mutant:
 
 - **1**, `log_error_redactor.dart`'s trailing `return null;` — a true
   equivalent mutant, not a gap: the enclosing function's return type is
@@ -79,16 +104,16 @@ The 7 survivors, individually accounted for:
   under `flutter test`, so the *assignment* is dead in every test build even
   though the handler *logic* it points at is fully tested directly (see
   above).
-- **1**, an `&&`→`||` swap inside `enabled: reportCrashes && kReleaseMode`,
-  itself inside the `hasFirebase ? FirebaseCrashlyticsAdapter(...) : null`
-  branch — already `// coverage:ignore`d, unreachable under `flutter test`
-  because no test in this suite calls `Firebase.initializeApp()`, so
-  `hasFirebase` is always `false` and the whole branch, operator swap
-  included, never runs.
 
-Every one of the 7 is already the subject of a `// coverage:ignore` pragma in
+Every one of the 6 is already the subject of a `// coverage:ignore` pragma in
 the source, or — the redactor's `return null;` — already documented as a
-genuine equivalent mutant; none is new.
+genuine equivalent mutant; none is new. Unlike the last release of this
+CHANGELOG entry, none is accepted on the strength of "this looks like the
+other one" — the `kReleaseMode` family is one fact (a compile-time constant
+with no test-time seam, full stop) applied three times, not three separate
+guesses, and the previous, weaker fourth item (the `hasFirebase` branch) is
+gone because it turned out to be fixable — see
+`buildCrashlyticsReportForTest` above.
 
 ## 0.4.0
 
