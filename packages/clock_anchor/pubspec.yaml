@@ -21,8 +21,12 @@ dev_dependencies:
   # package — "a wall clock the user moves cannot move an HLC stamp" is a
   # claim about the two together, and a test that fakes the clock proves
   # nothing about the real `HlcClockImpl`. Both members resolve against the
-  # workspace lockfile, and neither package is published to pub.dev (consumers
-  # pin them by git tag), so a path dev-dependency costs nothing downstream.
+  # workspace lockfile.
+  #
+  # A path DEV-dependency does not block publishing: dev-dependencies are
+  # never resolved by a consumer, so pub does not follow this one.
+  # `dart pub publish --dry-run` is a CI step for this package precisely so
+  # that claim is checked rather than asserted.
   hybrid_logical_clock:
     path: ../hybrid_logical_clock
   lints: ^6.1.0
