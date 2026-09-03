@@ -44,6 +44,17 @@ jobs:
       - run: dart test
         working-directory: packages/hybrid_logical_clock
 
+      # Runs after hybrid_logical_clock's own suite on purpose: clock_anchor
+      # carries an integration test against the real package rather than a
+      # stand-in, so when both break, the narrower failure is the one to read
+      # first.
+      #
+      # Every package's tests are listed by hand here, which means a package
+      # added without a step of its own is silently never tested. That is how
+      # this one nearly shipped.
+      - run: dart test
+        working-directory: packages/clock_anchor
+
       # `flutter test`, not `dart test`: ui_kit's tests import `flutter_test`,
       # which the bare Dart test runner cannot load.
       - run: flutter test
@@ -70,6 +81,9 @@ jobs:
       # length, unresolvable doc links) before a release rather than during one.
       - run: dart pub publish --dry-run
         working-directory: packages/hybrid_logical_clock
+
+      - run: dart pub publish --dry-run
+        working-directory: packages/clock_anchor
 
       # ui_kit and connectivity_status are intentionally not published (git
       # dependency only), so no publish dry-run step for either.

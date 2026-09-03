@@ -15,6 +15,7 @@ pubspec.lock
 
 # `flutter test --coverage` output. Regenerated on demand, never reviewed.
 coverage/
+lcov.info
 
 # plan-cycle per-repo ledger + plan store. Session state, not source.
 .claude/.plan-cycle/

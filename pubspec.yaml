@@ -8,6 +8,7 @@ environment:
   sdk: ^3.8.0
 
 workspace:
+  - packages/clock_anchor
   - packages/connectivity_status
   - packages/dart_lints
   - packages/dart_mutants
