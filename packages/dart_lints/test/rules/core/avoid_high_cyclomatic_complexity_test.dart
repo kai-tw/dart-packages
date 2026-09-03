@@ -500,6 +500,37 @@ int f(E x) {
       },
     );
 
+    test(
+      '[partition] a clean arrow-body (=>) switch expression is exempt',
+      () {
+        const String source = '''
+enum E { a, b }
+int f(E x) => switch (x) {
+  E.a => 1,
+  E.b => 2,
+};
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      '[boundary] an arrow body that is not a switch at all is never '
+      'exempt',
+      () {
+        const String source = '''
+int f(bool a, bool b, bool c, bool d) => a && b && c && d;
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
+
     test('[partition] a clean top-level switch STATEMENT is exempt', () {
       const String source = '''
 enum E { a, b }
@@ -762,5 +793,163 @@ void f(bool cond) {
         hasLength(1),
       );
     });
+
+    test('[boundary] an empty function body is not exempt', () {
+      const String source = '''
+void f() {}
+''';
+      expect(
+        _lint(source, maxComplexity: 0, exemptFlatDispatch: true),
+        hasLength(1),
+      );
+    });
+
+    test(
+      '[boundary] a clean switch statement that is not the last statement '
+      'is not exempt',
+      () {
+        // Distinguishes the `i != statements.length - 1` guard from a
+        // no-op: without it, `last` resolves to the switch (which passes
+        // _isCleanSwitchStatement in isolation) and the trailing
+        // print('done') is never accounted for.
+        const String source = '''
+enum E { a, b }
+void f(E x) {
+  switch (x) {
+    case E.a:
+      print(1);
+      break;
+    case E.b:
+      print(2);
+      break;
+  }
+  print('done');
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
+
+    test(
+      '[boundary] a switch STATEMENT scrutinee having a branch '
+      'disqualifies it',
+      () {
+        const String source = '''
+enum E { a, b }
+void f(E? x) {
+  switch (x ?? compute()) {
+    case E.a:
+      print(1);
+      break;
+    case E.b:
+      print(2);
+      break;
+  }
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
+
+    test(
+      '[boundary] a switch STATEMENT case with a when guard disqualifies '
+      'it',
+      () {
+        const String source = '''
+void f(Object x) {
+  switch (x) {
+    case int n when n > 0:
+      print(n);
+      break;
+    case int():
+      print(0);
+      break;
+    default:
+      print(-1);
+  }
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
+
+    test(
+      '[boundary] a switch STATEMENT case with its own branch disqualifies '
+      'it',
+      () {
+        const String source = '''
+enum E { a, b }
+void f(E x, bool cond) {
+  switch (x) {
+    case E.a:
+      if (cond) {
+        print(1);
+      }
+      break;
+    case E.b:
+      print(2);
+      break;
+  }
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
+
+    test(
+      '[boundary] a try with no catch clauses (finally only) is not '
+      'exempt',
+      () {
+        const String source = '''
+void f() {
+  try {
+    doThing();
+  } finally {
+    cleanup();
+  }
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 0, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
+
+    test(
+      '[boundary] a body of only branch-free local declarations, with no '
+      'switch or try at all, is not exempt — and does not walk the '
+      'leading-locals scan past the end of the statement list',
+      () {
+        // Every statement here passes the "leading local, no branches" test,
+        // so the scan that looks for a trailing dispatch has nothing to stop
+        // on before running off the end. Pins the loop bound at
+        // `statements.length - 1`, not `- 1` weakened to `+ 1`: that specific
+        // slip lets `i` advance one past the last valid index and index the
+        // list out of bounds instead of cleanly falling through to "not a
+        // flat dispatch".
+        const String source = '''
+void f() {
+  final int a = 1;
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 0, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
   });
 }
