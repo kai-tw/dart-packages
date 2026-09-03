@@ -1,0 +1,67 @@
+name: package-tag
+
+# Tag every package version that reached `main` untagged.
+#
+# WHY A WORKFLOW AND NOT ONLY tool/githooks/post-commit
+#   Every release commit on this repo's main so far is a GitHub squash-merge
+#   (one parent, a "(#N)" suffix) — created server-side when a PR merges, so
+#   no contributor's local post-commit hook ever ran for it. That hook only
+#   helps a direct local commit to main; this is what actually tags a
+#   PR-merged release, the normal way one lands here.
+#
+# WHY IT RE-RUNS format + dart_lints ITSELF RATHER THAN WAITING ON `CI`
+#   A tag is the statement that a version is final, so it should not land on
+#   a tree with a lint or formatting violation the local pre-commit hook was
+#   supposed to catch (e.g. a commit made through GitHub's web UI, where no
+#   hook runs at all). Chaining on the separate `CI` workflow's result would
+#   mean a `workflow_run` trigger, where the commit that triggered it and the
+#   commit this job checks out are two different things — re-running the
+#   cheap checks inline keeps the ref unambiguous. The full test/build matrix
+#   is deliberately NOT repeated here: ci.yml already runs it on this same
+#   push, and doubling it would roughly double this push's CI cost for a
+#   question ci.yml is already answering.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # creates and pushes the tags
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need the existing tags to know what's missing
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - run: flutter pub get
+
+      - run: dart format --output=none --set-exit-if-changed .
+
+      - run: dart run dart_lints
+
+      - name: Create the missing tags
+        id: plan
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          tool/package_tags.sh --create
+
+      - name: Push them
+        if: steps.plan.outputs.tags != ''
+        env:
+          TAGS: ${{ steps.plan.outputs.tags }}
+        # Deliberately unquoted: this is a list of refs and word splitting is
+        # what turns it into one.
+        run: git push --atomic origin $TAGS
