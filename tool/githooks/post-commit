@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# post-commit — tags a release commit automatically.
+#
+# WHY: each package here is versioned independently (own pubspec.yaml, own
+# CHANGELOG.md), and a release commit's subject already says which package
+# and version it ships — "preference_store 0.1.1: ...". Nothing turned that
+# into a git tag, so releases had none. This hook reads the subject the same
+# way a human would and tags what it recognizes; anything it doesn't
+# recognize (an initial "Add x package" commit, a multi-package commit) is
+# left for a manual `git tag`.
+#
+# Tag format: <package>-v<version> — the convention melos uses for the same
+# kind of independently-versioned pub workspace.
+#
+# Local only: creates the tag, does not push it. Push it along with the
+# commit, e.g. `git push --follow-tags`.
+#
+# Wiring (not tracked by git — redo after a fresh clone):
+#   git config core.hooksPath tool/githooks
+
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)" || exit 0
+
+subject=$(git log -1 --pretty=%s)
+
+release_re='^([a-z][a-z0-9_]*) ([0-9]+\.[0-9]+\.[0-9]+):'
+[[ "$subject" =~ $release_re ]] || exit 0
+package="${BASH_REMATCH[1]}"
+version="${BASH_REMATCH[2]}"
+
+pubspec="packages/$package/pubspec.yaml"
+[ -f "$pubspec" ] || exit 0
+
+pubspec_version=$(grep -m1 '^version:' "$pubspec" | sed 's/^version:[[:space:]]*//')
+[ "$pubspec_version" = "$version" ] || exit 0
+
+tag="${package}-v${version}"
+
+if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+  echo "post-commit: tag $tag already exists, skipping." >&2
+  exit 0
+fi
+
+git tag -a "$tag" -m "$subject"
+echo "post-commit: tagged $tag" >&2
