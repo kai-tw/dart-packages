@@ -86,10 +86,11 @@ because it is not real: applying that exact mutation by hand and running
 `test/ntp_packet_test.dart` directly **fails two tests** (a byte outside
 `A`-`Z` no longer empties the kiss code — exactly the control-character
 injection this check exists to stop). Re-running `dart_mutants` against that
-one file in isolation scores it correctly (`41/41` detected). The likely
-cause is `.dart_tool/test/incremental_kernel.*` — `dart test`'s own
+one file in isolation scored it correctly (`41/41` detected). Cause was
+`.dart_tool/test/incremental_kernel.*` — `dart test`'s own
 incremental-compilation cache — not staying invalidated across the very fast,
 very similar rewrites a mutation run does to one file in quick succession
-across a large batch. Not yet fixed at the tool level — recorded here, next
-to the number it corrupted, so it is not silently wrong again in the
-meantime.
+across a large batch. **Fixed at the tool level in this same PR**
+(`dart_mutants`' `TestCompilationCache`) — re-running the exact 24-file batch
+that produced the false negative now scores `ntp_packet.dart` `41/41`, and
+every other number in this entry unchanged.
