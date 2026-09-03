@@ -15,6 +15,7 @@ import 'mutant_verdict.dart';
 import 'mutated_file_registry.dart';
 import 'mutation_run_report.dart';
 import 'process_command.dart';
+import 'test_compilation_cache.dart';
 
 /// Runs every operator's mutants against [testCommand], one at a time, and
 /// scores the result.
@@ -44,6 +45,13 @@ class MutationTestRunner {
 
   final MutatedFileRegistry _registry = MutatedFileRegistry();
 
+  /// See [TestCompilationCache]'s own doc for why this exists at all — in
+  /// short, `dart test`'s incremental kernel cache does not reliably notice
+  /// the fast, repeated, small rewrites this class makes to one file.
+  late final TestCompilationCache _testCache = TestCompilationCache(
+    testCommand.workingDirectory,
+  );
+
   /// Runs the full session over [filePaths]. Generated files are dropped
   /// silently — they are never a meaningful target, not a policy choice a
   /// caller needs to make per run — everything else needs the caller to have
@@ -66,6 +74,7 @@ class MutationTestRunner {
     // restore half is simply a no-op until the first mutant is written.
     _registry.armSignalRestore(beforeExit: ProcessCommand.killAllRunning);
     try {
+      _testCache.clear();
       final int? baselineExitCode = await testCommand.run(
         timeout: mutantTimeout,
       );
@@ -174,6 +183,7 @@ class MutationTestRunner {
       if (!await compileSafetyGate.compiles(mutant.filePath)) {
         return MutantVerdict.invalid;
       }
+      _testCache.clear();
       final int? exitCode = await testCommand.run(timeout: mutantTimeout);
       if (exitCode == null) {
         // A mutant that hangs the suite is not neutral evidence — it often
