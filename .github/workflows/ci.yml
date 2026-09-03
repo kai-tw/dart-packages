@@ -41,6 +41,14 @@ jobs:
       - run: dart test
         working-directory: packages/dart_lints
 
+      # Its own dart_test.yaml pins concurrency: 1 and a 4x timeout — most of
+      # this suite spins up a real temp package and runs real subprocesses
+      # (dart pub get / analyze / test) against it, each now a cold compile
+      # by design (see TestCompilationCache), so this step is the slowest one
+      # here. That is the accepted trade, not a flake to chase.
+      - run: dart test
+        working-directory: packages/dart_mutants
+
       - run: dart test
         working-directory: packages/hybrid_logical_clock
 
