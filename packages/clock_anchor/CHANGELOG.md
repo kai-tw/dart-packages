@@ -34,8 +34,62 @@ real `hybrid_logical_clock` rather than a stand-in: the claim being made is
 about the two packages together.
 
 Line coverage 100% (396/396); mutation score 96.7% (264/273, `dart_mutants`).
-The nine survivors are all statement deletions whose removal changes nothing
-observable — socket teardown, a redundant early return that a later guard
-already covers, and the unreachable half of a guard the regex makes
-impossible to trip. They are listed rather than chased: killing them would
-mean asserting on things the package does not promise.
+
+The nine survivors, individually verified rather than summarised — several by
+directly applying the mutation and confirming the real suite still passes,
+not just by reasoning about the code:
+
+- **1**, `ClockAnchorService._trySample`'s trailing `return null;` — a true
+  equivalent mutant: the function's return type is `Future<TimeSample?>`, so
+  control falling off the end of an `async` function with a nullable return
+  type already completes with `null`, identical to the explicit statement.
+- **2**, `HttpDateTimeSource._parseRfc850`'s `if (shortYear < 0) { return
+  null; }` — a true equivalent mutant, and provably so: `shortYear` comes from
+  the `_rfc850` regex's year group, which is `(\d{2})` — exactly two ASCII
+  digits, mandatory, not optional. `int.tryParse` on a string matching `\d{2}`
+  can only ever produce a value in `[0, 99]`; `shortYear < 0` cannot be true
+  for any input the regex accepts, so this branch is dead by construction, not
+  merely hard to reach.
+- **2**, `StampRepairPolicy.plan`'s `if (!now.isTrustworthy) { return <T>[];
+  }` — a true equivalent mutant: `inspect()`, called on every element of the
+  loop this guard would otherwise skip, has the identical check at its own
+  top and returns `StampRepairDecision.defer()`, whose `needsRepair` is
+  `false` (`action == StampRepairAction.repair` fails for `.defer`). With the
+  outer guard removed, every record is still inspected, still yields
+  `needsRepair == false`, and `plan` still returns `<T>[]` — the same value,
+  by a different route.
+- **3**, `NtpUdpExchange`'s teardown — `exchange()`'s `socket.close()`,
+  `_firstReply`'s `if (event != RawSocketEvent.read) { return; }` guard, and
+  `_firstReply`'s `await subscription.cancel();` — verified by applying each
+  deletion in isolation and running `test/ntp_udp_exchange_test.dart` for
+  real (all three still pass, not inferred): the Dart VM's own
+  `_RawDatagramSocket` wires its `StreamController` with `onCancel: close`
+  (`socket_patch.dart`), so cancelling the exchange's one subscription closes
+  the socket as a side effect, and `exchange()`'s own explicit `close()` does
+  the same independently — each of the two is redundant with the other, so
+  deleting either alone leaves the other still closing the socket, and no
+  test can tell the difference. The event guard is the same shape one level
+  in: any event other than `.read` reaches `socket.receive()`, which returns
+  `null` when nothing is buffered, and the very next line already returns
+  early on a `null` datagram.
+
+None of the nine is "hard to test and therefore accepted" — every one is a
+provable equivalence (dead code by the language's own fall-through rule, by
+what the regex can produce, or by a second, independently-sufficient path to
+the same effect), checked against source rather than assumed from the shape
+of the description `dart_mutants` prints.
+
+⚠️ A tenth mutant in this same family — `NtpPacket.kissCode`'s `if (byte <
+0x41 || byte > 0x5A)` swapped to `&&` — was *reported* undetected by a full,
+24-file `dart_mutants` run across this package, but is not listed above
+because it is not real: applying that exact mutation by hand and running
+`test/ntp_packet_test.dart` directly **fails two tests** (a byte outside
+`A`-`Z` no longer empties the kiss code — exactly the control-character
+injection this check exists to stop). Re-running `dart_mutants` against that
+one file in isolation scores it correctly (`41/41` detected). The likely
+cause is `.dart_tool/test/incremental_kernel.*` — `dart test`'s own
+incremental-compilation cache — not staying invalidated across the very fast,
+very similar rewrites a mutation run does to one file in quick succession
+across a large batch. Not yet fixed at the tool level — recorded here, next
+to the number it corrupted, so it is not silently wrong again in the
+meantime.
