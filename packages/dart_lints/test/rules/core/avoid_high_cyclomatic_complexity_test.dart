@@ -5,13 +5,18 @@ import 'package:dart_lints/src/rules/core/avoid_high_cyclomatic_complexity.dart'
 import 'package:test/test.dart';
 
 /// Parses [source] syntactically and runs the rule's visitor over it.
-List<LintViolation> _lint(String source, {required int maxComplexity}) {
+List<LintViolation> _lint(
+  String source, {
+  required int maxComplexity,
+  bool exemptFlatDispatch = false,
+}) {
   final ParseStringResult result = parseString(
     content: source,
     throwIfDiagnostics: false,
   );
   final AvoidHighCyclomaticComplexity rule = AvoidHighCyclomaticComplexity(
     maxComplexity: maxComplexity,
+    exemptFlatDispatch: exemptFlatDispatch,
   );
   final LintVisitor visitor = rule.createVisitor(
     'lib/foo.dart',
@@ -461,6 +466,300 @@ final Function f = (int x) {
       expect(
         _lint('abstract class C { void f(); }', maxComplexity: 0),
         isEmpty,
+      );
+    });
+  });
+
+  group('exemptFlatDispatch — off by default, opt-in', () {
+    const String cleanSwitchExpression = '''
+enum E { a, b }
+int f(E x) {
+  return switch (x) {
+    E.a => 1,
+    E.b => 2,
+  };
+}
+''';
+
+    test('[boundary] reports when the option is off (the default)', () {
+      expect(_lint(cleanSwitchExpression, maxComplexity: 1), hasLength(1));
+    });
+
+    test(
+      '[partition] a clean top-level switch expression is exempt when the '
+      'option is on',
+      () {
+        expect(
+          _lint(
+            cleanSwitchExpression,
+            maxComplexity: 1,
+            exemptFlatDispatch: true,
+          ),
+          isEmpty,
+        );
+      },
+    );
+
+    test('[partition] a clean top-level switch STATEMENT is exempt', () {
+      const String source = '''
+enum E { a, b }
+void f(E x) {
+  switch (x) {
+    case E.a:
+      print(1);
+      break;
+    case E.b:
+      print(2);
+      break;
+  }
+}
+''';
+      expect(
+        _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+        isEmpty,
+      );
+    });
+
+    test('[partition] a clean top-level try/catch is exempt', () {
+      const String source = '''
+void f() {
+  try {
+    doThing();
+  } on FormatException catch (e) {
+    handle(e);
+  } on StateError catch (e) {
+    handle(e);
+  }
+}
+''';
+      expect(
+        _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+        isEmpty,
+      );
+    });
+
+    test(
+      '[boundary] a branch-free hoisted local before the switch is still '
+      'exempt',
+      () {
+        const String source = '''
+enum E { a, b }
+int f(E e) {
+  final int y = 1;
+  return switch (e) {
+    E.a => 1,
+    E.b => 2,
+  };
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          isEmpty,
+        );
+      },
+    );
+
+    test(
+      '[boundary] a hoisted local whose own initializer has a branch '
+      'disqualifies it',
+      () {
+        const String source = '''
+enum E { a, b }
+int f(E e, int? a) {
+  final int y = a ?? compute();
+  return switch (e) {
+    E.a => 1,
+    E.b => 2,
+  };
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
+
+    test('[boundary] wrapped in a loop is not exempt', () {
+      const String source = '''
+enum E { a, b }
+void f(List<E> xs) {
+  for (final E x in xs) {
+    switch (x) {
+      case E.a:
+        print(1);
+        break;
+      case E.b:
+        print(2);
+        break;
+    }
+  }
+}
+''';
+      expect(
+        _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+        hasLength(1),
+      );
+    });
+
+    test(
+      '[boundary] preceded by a leading guard is not exempt — split the '
+      'guard into its own method instead',
+      () {
+        const String source = '''
+enum E { a, b }
+int f(bool ready, E x) {
+  if (!ready) {
+    return 0;
+  }
+  return switch (x) {
+    E.a => 1,
+    E.b => 2,
+  };
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
+
+    test('[boundary] followed by more logic is not exempt', () {
+      const String source = '''
+enum E { a, b }
+int f(E x) {
+  final int y = switch (x) {
+    E.a => 1,
+    E.b => 2,
+  };
+  return y + 1;
+}
+''';
+      expect(
+        _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+        hasLength(1),
+      );
+    });
+
+    test(
+      '[boundary] the switch scrutinee itself having a branch disqualifies '
+      'it',
+      () {
+        // x ?? E.a would itself be exempted by the ?? field-defaulting rule
+        // (E.a is a PrefixedIdentifier with a bare-identifier prefix, same
+        // shape as `other.field`) — compute() is a call, so this ?? counts
+        // regardless.
+        const String source = '''
+enum E { a, b }
+int f(E? x) {
+  return switch (x ?? compute()) {
+    E.a => 1,
+    E.b => 2,
+  };
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
+
+    test('[boundary] an arm with its own branch disqualifies it', () {
+      const String source = '''
+enum E { a, b }
+int f(E x, bool cond) {
+  return switch (x) {
+    E.a => cond ? 1 : 2,
+    E.b => 3,
+  };
+}
+''';
+      expect(
+        _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+        hasLength(1),
+      );
+    });
+
+    test('[boundary] a guarded case (a when clause) disqualifies it', () {
+      const String source = '''
+int f(Object x) {
+  return switch (x) {
+    int n when n > 0 => 1,
+    int() => 2,
+    _ => 3,
+  };
+}
+''';
+      expect(
+        _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+        hasLength(1),
+      );
+    });
+
+    test(
+      '[boundary] the try body itself having a branch disqualifies it',
+      () {
+        const String source = '''
+void f(bool cond) {
+  try {
+    if (cond) {
+      doThing();
+    }
+  } on FormatException catch (e) {
+    handle(e);
+  } on StateError catch (e) {
+    handle(e);
+  }
+}
+''';
+        expect(
+          _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+          hasLength(1),
+        );
+      },
+    );
+
+    test('[boundary] a catch arm with its own branch disqualifies it', () {
+      const String source = '''
+void f(bool cond) {
+  try {
+    doThing();
+  } on FormatException catch (e) {
+    if (cond) {
+      handle(e);
+    }
+  } on StateError catch (e) {
+    handle(e);
+  }
+}
+''';
+      expect(
+        _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+        hasLength(1),
+      );
+    });
+
+    test('[boundary] a finally block with its own branch disqualifies it', () {
+      const String source = '''
+void f(bool cond) {
+  try {
+    doThing();
+  } on FormatException catch (e) {
+    handle(e);
+  } on StateError catch (e) {
+    handle(e);
+  } finally {
+    if (cond) {
+      cleanup();
+    }
+  }
+}
+''';
+      expect(
+        _lint(source, maxComplexity: 1, exemptFlatDispatch: true),
+        hasLength(1),
       );
     });
   });

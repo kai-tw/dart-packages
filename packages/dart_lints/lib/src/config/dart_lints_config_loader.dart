@@ -352,6 +352,8 @@ class DartLintsConfigLoader {
         return _coerceMapList(value, configPath, at);
       case OptionKind.integer:
         return _coerceInteger(value, configPath, at);
+      case OptionKind.boolean:
+        return _coerceBoolean(value, configPath, at);
     }
   }
 
@@ -403,6 +405,16 @@ class DartLintsConfigLoader {
     }
     throw DartLintsConfigException(
       '"$at" must be an integer, got ${_typeName(value)}',
+      configPath: configPath,
+    );
+  }
+
+  bool _coerceBoolean(Object? value, String configPath, String at) {
+    if (value is bool) {
+      return value;
+    }
+    throw DartLintsConfigException(
+      '"$at" must be true or false, got ${_typeName(value)}',
       configPath: configPath,
     );
   }

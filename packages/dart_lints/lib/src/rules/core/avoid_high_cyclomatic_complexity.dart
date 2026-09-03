@@ -72,6 +72,38 @@ import '../../lint_rule_base.dart';
 /// to this rule, so the deliberate choice here is to force that decision
 /// into config rather than pick a number this rule ships opinions about.
 ///
+/// **[exemptFlatDispatch] (opt-in, default `false`): a "flat dispatch" unit
+/// is never reported, however many arms it has.** A unit qualifies only when
+/// its ENTIRE body — after skipping any leading local declarations that are
+/// themselves branch-free — is exactly one `switch` (statement or
+/// expression) or `try`/`catch`, with a branch-free scrutinee (or
+/// branch-free try body and `finally` block), no pattern guard on any arm,
+/// and every arm's own code free of branch points. Nothing may precede it
+/// except those branch-free locals, and nothing may follow it — not even a
+/// single leading `if (cond) return;` guard: split the guard into its own
+/// method and let the flat dispatch be the whole of what remains, rather
+/// than teaching this rule to tell a harmless guard apart from one that
+/// isn't (`error-handling.md §Catching`'s "extract a helper" already
+/// prescribes exactly that split for a guarded catch-chain).
+///
+/// This is a narrower, weaker-grounded claim than the `??` exemption above.
+/// That one holds because a data class's `field ?? this.field` branches are
+/// the same idiom repeated — perfectly correlated, so one test earns all of
+/// them. A flat dispatch's arms are usually NOT that: `icon => switch (this)
+/// { A => iconA, B => iconB, ... }` maps 8 enum values to 8 genuinely
+/// different icons, and a wrong icon for `B` is a bug independent of a wrong
+/// icon for `A`. The exemption holds anyway, on two different grounds: (1)
+/// Dart has no multi-type `catch`, so an exhaustive catch-chain's arm count
+/// is a language-shape floor — there is no lower-complexity equivalent to
+/// reach for; (2) for a pure one-arm-per-value mapping, a single
+/// parametrized test iterating every enum value exercises all N arms for
+/// the authoring cost of one, unlike a function whose paths interact and
+/// each need their own scenario. Because the argument is narrower and has
+/// not been validated against every consuming project, this stays opt-in —
+/// contrast [maxComplexity], which has no default because a value is
+/// mandatory; this option defaults to off because *not* exempting is the
+/// safe default.
+///
 /// **Bad — five independent paths hiding behind one method:**
 /// ```dart
 /// String describe(User? user) {
@@ -94,11 +126,17 @@ import '../../lint_rule_base.dart';
 /// }
 /// ```
 class AvoidHighCyclomaticComplexity extends LintRule {
-  AvoidHighCyclomaticComplexity({required this.maxComplexity});
+  AvoidHighCyclomaticComplexity({
+    required this.maxComplexity,
+    this.exemptFlatDispatch = false,
+  });
 
   /// The highest complexity a unit may have without being reported. Not
   /// optional — see the class doc for why this rule ships no default.
   final int maxComplexity;
+
+  /// See the class doc's [exemptFlatDispatch] section. Off by default.
+  final bool exemptFlatDispatch;
 
   @override
   String get name => 'avoid_high_cyclomatic_complexity';
@@ -114,13 +152,20 @@ class AvoidHighCyclomaticComplexity extends LintRule {
     String filePath,
     LineInfo lineInfo,
     String source,
-  ) => _Visitor(filePath, lineInfo, source, maxComplexity);
+  ) => _Visitor(filePath, lineInfo, source, maxComplexity, exemptFlatDispatch);
 }
 
 class _Visitor extends LintVisitor {
-  _Visitor(super.filePath, super.lineInfo, super.source, this.maxComplexity);
+  _Visitor(
+    super.filePath,
+    super.lineInfo,
+    super.source,
+    this.maxComplexity,
+    this.exemptFlatDispatch,
+  );
 
   final int maxComplexity;
+  final bool exemptFlatDispatch;
 
   /// The nearest enclosing named unit, for labelling a closure's report —
   /// `null` at the top level, where a closure has no better description.
@@ -200,17 +245,133 @@ class _Visitor extends LintVisitor {
     }
     final _ComplexityCounter counter = _ComplexityCounter();
     body.accept(counter);
-    if (counter.complexity > maxComplexity) {
-      report(
-        ruleName: 'avoid_high_cyclomatic_complexity',
-        message:
-            '$label has cyclomatic complexity ${counter.complexity}, over '
-            'the configured max of $maxComplexity. Each independent path '
-            'needs its own test — split it, or extract a piece with its '
-            'own name and its own tests.',
-        offset: offset,
-      );
+    if (counter.complexity <= maxComplexity) {
+      return;
     }
+    if (exemptFlatDispatch && _isFlatDispatch(body)) {
+      return;
+    }
+    report(
+      ruleName: 'avoid_high_cyclomatic_complexity',
+      message:
+          '$label has cyclomatic complexity ${counter.complexity}, over '
+          'the configured max of $maxComplexity. Each independent path '
+          'needs its own test — split it, or extract a piece with its '
+          'own name and its own tests.',
+      offset: offset,
+    );
+  }
+
+  // ── exemptFlatDispatch shape check ──────────────────────────────────────
+  //
+  // Only ever consulted once `_measure` has already found the unit over the
+  // cap, so none of this runs (and none of it needs to be fast) on the
+  // common case.
+
+  /// True when [body] is nothing but one exhaustive switch or try/catch —
+  /// see the class doc's [AvoidHighCyclomaticComplexity.exemptFlatDispatch]
+  /// section for exactly what that requires.
+  bool _isFlatDispatch(FunctionBody body) {
+    if (body is ExpressionFunctionBody) {
+      final Expression e = body.expression;
+      return e is SwitchExpression && _isCleanSwitchExpression(e);
+    }
+    if (body is! BlockFunctionBody) {
+      return false;
+    }
+    final NodeList<Statement> statements = body.block.statements;
+    if (statements.isEmpty) {
+      return false;
+    }
+    int i = 0;
+    while (i < statements.length - 1 &&
+        statements[i] is VariableDeclarationStatement &&
+        _hasNoBranches(statements[i])) {
+      i++;
+    }
+    if (i != statements.length - 1) {
+      // Either more than one non-local statement precedes the last one, or a
+      // leading local itself has a branch — either way, the dispatch is not
+      // the whole story.
+      return false;
+    }
+    final Statement last = statements[i];
+    if (last is ReturnStatement) {
+      final Expression? e = last.expression;
+      return e is SwitchExpression && _isCleanSwitchExpression(e);
+    }
+    if (last is SwitchStatement) {
+      return _isCleanSwitchStatement(last);
+    }
+    if (last is TryStatement) {
+      return _isCleanTry(last);
+    }
+    return false;
+  }
+
+  bool _isCleanSwitchExpression(SwitchExpression node) {
+    if (!_hasNoBranches(node.expression)) {
+      return false;
+    }
+    for (final SwitchExpressionCase c in node.cases) {
+      if (c.guardedPattern.whenClause != null) {
+        return false;
+      }
+      if (!_hasNoBranches(c.expression)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _isCleanSwitchStatement(SwitchStatement node) {
+    if (!_hasNoBranches(node.expression)) {
+      return false;
+    }
+    for (final SwitchMember member in node.members) {
+      if (member is SwitchPatternCase &&
+          member.guardedPattern.whenClause != null) {
+        return false;
+      }
+      if (!_hasNoBranchesAmong(member.statements)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _isCleanTry(TryStatement node) {
+    if (node.catchClauses.isEmpty) {
+      return false;
+    }
+    if (!_hasNoBranches(node.body)) {
+      return false;
+    }
+    final Block? finallyBlock = node.finallyBlock;
+    if (finallyBlock != null && !_hasNoBranches(finallyBlock)) {
+      return false;
+    }
+    for (final CatchClause c in node.catchClauses) {
+      if (!_hasNoBranches(c.body)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// True when [node] contributes no branch points of its own — reuses
+  /// [_ComplexityCounter] rather than a second detector, so "does this
+  /// scrutinee / arm / try body hide a branch" is answered by the exact same
+  /// logic that answers "how complex is this function", never a hand-rolled
+  /// duplicate that could drift from it.
+  bool _hasNoBranches(AstNode node) => _hasNoBranchesAmong(<AstNode>[node]);
+
+  bool _hasNoBranchesAmong(Iterable<AstNode> nodes) {
+    final _ComplexityCounter counter = _ComplexityCounter();
+    for (final AstNode node in nodes) {
+      node.accept(counter);
+    }
+    return counter.complexity == 1;
   }
 }
 

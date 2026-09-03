@@ -1,3 +1,32 @@
+## 0.5.3
+
+`avoid_high_cyclomatic_complexity` gains an opt-in `exemptFlatDispatch`
+option (default `false`): a unit whose entire body — after any branch-free
+leading local declarations — is exactly one exhaustive switch or try/catch,
+with a branch-free scrutinee (or try body / `finally` block) and every arm
+free of its own branch points, is never reported, however many arms it
+has. Narrower and weaker-grounded than the `??` field-defaulting exemption
+below: that one holds because `copyWith`'s branches are the same idiom
+repeated, perfectly correlated. A flat dispatch's arms are usually
+genuinely different behaviours instead — `icon => switch (this) { A =>
+iconA, B => iconB, ... }` maps 8 enum values to 8 different icons, and a
+wrong icon for `B` is an independent bug from a wrong icon for `A`. It
+holds anyway, on two narrower grounds: Dart has no multi-type `catch`, so
+an exhaustive catch-chain's arm count is a language-shape floor with no
+lower-complexity equivalent to reach for; and a pure one-arm-per-value
+mapping is exercised in full by one parametrized test over every enum
+value, at the authoring cost of one. Deliberately does **not** tolerate a
+leading guard (`if (cond) return;` before the dispatch) — split the guard
+into its own method and let the flat dispatch be the whole of what
+remains, rather than teaching this rule to tell a harmless guard apart
+from a harmful one. Off by default: not exempting is the safe default
+until validated project-by-project.
+
+Adds `OptionKind.boolean` to the option-kind vocabulary
+(`rule_descriptor.dart` / `dart_lints_config_loader.dart`) — the first
+rule option of this shape; every other current option is a string, string
+list, map list, or integer.
+
 ## 0.5.2
 
 `avoid_high_cyclomatic_complexity` stops counting `??` when both sides are
