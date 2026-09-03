@@ -486,6 +486,29 @@ int f(E x) {
     });
 
     test(
+      '[boundary] the rule constructor\'s own default — exemptFlatDispatch '
+      'omitted entirely, not just explicitly passed false — still reports',
+      () {
+        // _lint always forwards a value (its own `= false` default masks
+        // AvoidHighCyclomaticComplexity's), so this constructs the rule
+        // directly to exercise the constructor's default value itself.
+        final ParseStringResult result = parseString(
+          content: cleanSwitchExpression,
+          throwIfDiagnostics: false,
+        );
+        final AvoidHighCyclomaticComplexity rule =
+            AvoidHighCyclomaticComplexity(maxComplexity: 1);
+        final LintVisitor visitor = rule.createVisitor(
+          'lib/foo.dart',
+          result.lineInfo,
+          cleanSwitchExpression,
+        );
+        result.unit.accept(visitor);
+        expect(visitor.violations, hasLength(1));
+      },
+    );
+
+    test(
       '[partition] a clean top-level switch expression is exempt when the '
       'option is on',
       () {
