@@ -66,6 +66,9 @@ jobs:
       - run: flutter test
         working-directory: packages/preference_store
 
+      - run: flutter test
+        working-directory: packages/log_system
+
       # connectivity_status's example app is not in the pub workspace (a
       # federated plugin's example never is), so it needs its own
       # resolution before it can build.

@@ -1,3 +1,50 @@
+## 0.4.1
+
+Tests only — no API or behaviour change to anything a host app calls.
+
+`FirebaseCrashlyticsAdapter` — the crash-reporter egress, and until now the
+single least-tested file in the package (0% line coverage) — is now covered
+end to end with a `mocktail`-based `MockFirebaseCrashlytics`: the `enabled`
+gate, that `debug`/`event` never reach it regardless, custom-key stamping
+(including the deferred, unawaited path), and that `warning`/`error`/`fatal`
+hand the reporter the *redacted* surrogate, never the raw object.
+
+Two internals gained a narrow, additive seam so this package's own tests can
+reach logic that was previously sealed behind `kReleaseMode` — a compile-time
+constant, always false under `flutter test`, so no test can flip it:
+
+- `LogSystem`'s two uncaught-error handler bodies (`FlutterError.onError`'s
+  environmental/logic-error split, `PlatformDispatcher.instance.onError`'s
+  "handled" contract) are now `LogSystem.handleFrameworkErrorForTest` /
+  `handleAsyncErrorForTest` — ordinary `@visibleForTesting` static methods
+  rather than closures written inline inside the release-only gate, in the
+  same shape as the existing `initWithRepositoryForTest`: not exported from
+  the public barrel, reachable only from this package's own tests. The
+  gate's *assignment* is still release-only and still untestable under
+  `flutter test`; only the handler *logic* moved somewhere a test can reach.
+- `LoggerAdapter` takes an optional `output` constructor parameter (defaults
+  to `logger`'s own `ConsoleOutput`, unchanged from before this existed), so
+  a test can inject `MemoryOutput()` and read back what was actually
+  printed — which is what caught that `debug` and `fatal` were previously
+  asserted only to complete, never to have printed anything, so a
+  `kReleaseMode` read backwards would have passed silently.
+
+**Every line change was checked against this package's own `CLAUDE.md`:
+`LogRepository` and the redactor's call sites are untouched.** Nothing here
+exposes which internal destination a level reached, and the redaction
+boundary still reduces at exactly its two existing sites and nowhere else.
+
+Line coverage 100% (211/211, `--check-ignore`); mutation 94.4% (119/126,
+`dart_mutants`). The 7 survivors are two families, both already the subject
+of a `// coverage:ignore` pragma in the source for the identical reason:
+code gated on `kReleaseMode` (always false under `flutter test`, so the
+gate's own *assignment* — as opposed to the logic behind it, see above — is
+dead in every test build), and the two lines that construct
+`FirebaseCrashlyticsAdapter` from the real `FirebaseCrashlytics.instance`
+(verified empirically to fail an internal plugin assertion in a pure-Dart
+test binary before this package's own code runs, since reaching it needs a
+registered `FirebaseCrashlyticsPlatform` this package does not own).
+
 ## 0.4.0
 
 `LogSink` — a host app can now register a destination of its own, either
