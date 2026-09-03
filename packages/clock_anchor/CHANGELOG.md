@@ -29,6 +29,13 @@ it rejects every peer's.
 - **`StampRepairPolicy`** — finds stamps written while the clock was wrong,
   and refuses to act on an untrustworthy reading.
 
-92 tests, including `test/hlc_integration_test.dart`, which runs against the
+142 tests, including `test/hlc_integration_test.dart`, which runs against the
 real `hybrid_logical_clock` rather than a stand-in: the claim being made is
 about the two packages together.
+
+Line coverage 100% (396/396); mutation score 96.7% (264/273, `dart_mutants`).
+The nine survivors are all statement deletions whose removal changes nothing
+observable — socket teardown, a redundant early return that a later guard
+already covers, and the unreachable half of a guard the regex makes
+impossible to trip. They are listed rather than chased: killing them would
+mean asserting on things the package does not promise.
