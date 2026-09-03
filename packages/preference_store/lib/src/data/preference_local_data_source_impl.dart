@@ -60,7 +60,30 @@ class PreferenceLocalDataSourceImpl<K extends Enum>
   @override
   Future<List<String>?> tryGetStringList(K key) async {
     final Object? value = _prefs.get(key.toString());
-    return value is List<String> ? value : null;
+    // `is List<String>` looks like the obvious check and is wrong. `get`
+    // hands back the plugin's cache verbatim, and that cache is filled from
+    // the platform channel, whose codec decodes a list as `List<Object?>` —
+    // so a list written in an earlier session comes back untyped and a
+    // strict check drops it. The value survives the round trip only within
+    // one session, where the cache still holds the exact list that was
+    // written, which is why this reads as working until the app restarts.
+    // `SharedPreferences.getStringList` casts for the same reason.
+    if (value is! List) {
+      return null;
+    }
+    // Element-checked rather than `cast<String>()`: a list of the wrong
+    // element type must return null like every other wrong-type read, and
+    // `cast` would throw on first access instead. The copy is deliberate —
+    // handing back the plugin's own list would let a caller mutate the
+    // cache.
+    final List<String> strings = <String>[];
+    for (final Object? element in value) {
+      if (element is! String) {
+        return null;
+      }
+      strings.add(element);
+    }
+    return strings;
   }
 
   @override

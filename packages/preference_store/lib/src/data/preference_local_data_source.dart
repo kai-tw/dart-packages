@@ -14,6 +14,11 @@
 /// A `tryGetXxx` call returns `null` both when the key was never written
 /// and when the stored value is a different runtime type than requested —
 /// callers cannot and should not distinguish the two.
+///
+/// For [tryGetStringList] the type check is per element rather than on the
+/// list itself, because a list restored from the platform arrives untyped:
+/// a list of strings is returned however it is typed, and a list holding
+/// anything else is `null` like any other wrong-type read.
 abstract class PreferenceLocalDataSource<K extends Enum> {
   Future<int?> tryGetInt(K key);
 
