@@ -1,3 +1,120 @@
+## 0.4.1
+
+Tests only — no API or behaviour change to anything a host app calls.
+
+`FirebaseCrashlyticsAdapter` — the crash-reporter egress, and until now the
+single least-tested file in the package (0% line coverage) — is now covered
+end to end: the `enabled` gate, that `debug`/`event` never reach it
+regardless, custom-key stamping (including the deferred, unawaited path), and
+that `warning`/`error`/`fatal` hand the reporter the *redacted* surrogate,
+never the raw object.
+
+It gets there through a new seam, not a mock of the SDK type directly: the
+adapter now depends on **`FirebaseCrashlyticsClient`**, a four-method contract
+this package owns, rather than `FirebaseCrashlytics` itself — the same shape
+every other data source here already has (`LogRepository`, `LogSink`), applied
+to the one place it was missing. Production wires the real SDK through
+`FirebaseCrashlyticsClient.wrapping`, a one-line-per-method delegating
+wrapper; the adapter's own tests hand it a hand-written fake instead, with
+plain list/map assertions replacing what used to be a `mocktail` mock against
+`FirebaseCrashlytics` — including the workaround that mock needed for
+`recordError`'s multi-argument capture order, which `mocktail`'s
+`VerificationResult.captured` documents nowhere and which turned out to match
+neither call-site, declaration, nor alphabetical order. `mocktail` stays a
+dev dependency for exactly one file now: `firebase_crashlytics_client_test.dart`
+mocks `FirebaseCrashlytics` to prove `wrapping`'s delegation itself is
+correct, which is the one remaining place in this package worth testing
+against the real SDK type.
+
+**A second seam, `LogSystem.buildCrashlyticsReportForTest`, does the same for
+`init`'s own decision about that destination** — `hasFirebase ? construct :
+null`, `enabled: reportCrashes && kReleaseMode`, and forwarding `customKeys`/
+`deferredCustomKeys` — extracted so a test supplies the client the same way
+`firebase_crashlytics_adapter_test.dart` does, rather than needing a real
+`FirebaseCrashlytics.instance` to reach it. This replaced a `// coverage:ignore`
+block that was wider than the actual problem: `Firebase.apps` and even
+`FirebaseCrashlytics.instance` itself are genuinely fakeable in a pure-Dart
+test (`Firebase.delegatePackingProperty` is `@visibleForTesting` for exactly
+this), so the *decision logic* had no real excuse to stay untested — only
+tracing the SDK source turned that up. What is left behind, at the one call
+site `init` now has for it, is narrower and precise: the instant any *method*
+is called on the client, `FirebaseCrashlyticsPlatform.instanceFor` asserts
+`pluginConstants['isCrashlyticsCollectionEnabled'] != null`, and
+`pluginConstants` reads a field private to `firebase_core_platform_interface`
+that only a real native `Firebase#initializeCore` round-trip populates — no
+object substitution reaches a private field in a package this one does not
+own. See `buildCrashlyticsReportForTest`'s own doc for the full trace.
+
+Two internals gained a narrow, additive seam so this package's own tests can
+reach logic that was previously sealed behind `kReleaseMode` — a compile-time
+constant, always false under `flutter test`, so no test can flip it:
+
+- `LogSystem`'s two uncaught-error handler bodies (`FlutterError.onError`'s
+  environmental/logic-error split, `PlatformDispatcher.instance.onError`'s
+  "handled" contract) are now `LogSystem.handleFrameworkErrorForTest` /
+  `handleAsyncErrorForTest` — ordinary `@visibleForTesting` static methods
+  rather than closures written inline inside the release-only gate, in the
+  same shape as the existing `initWithRepositoryForTest`: not exported from
+  the public barrel, reachable only from this package's own tests. The
+  gate's *assignment* is still release-only and still untestable under
+  `flutter test`; only the handler *logic* moved somewhere a test can reach.
+- `LoggerAdapter` takes an optional `output` constructor parameter (defaults
+  to `logger`'s own `ConsoleOutput`, unchanged from before this existed), so
+  a test can inject `MemoryOutput()` and read back what was actually
+  printed — which is what caught that `debug` and `fatal` were previously
+  asserted only to complete, never to have printed anything, so a
+  `kReleaseMode` read backwards would have passed silently.
+
+**Every line change was checked against this package's own `CLAUDE.md`:
+`LogRepository` and the redactor's call sites are untouched.** Nothing here
+exposes which internal destination a level reached, and the redaction
+boundary still reduces at exactly its two existing sites and nowhere else.
+
+Line coverage 100% (224/224, `--check-ignore`); mutation 95.3% (123/129,
+`dart_mutants`, 110 tests).
+
+`firebase_crashlytics_client.dart` scores `0/0` mutants, correctly rather than
+as a gap: `wrapping`'s delegation is pure single-expression forwarding
+(`Future<void> log(String message) => _instance.log(message);` and three
+siblings shaped the same way), so there is no `Block` body for
+`statement_deletion` to target and no operator, ternary, `??` or `switch` for
+anything else in this tool's operator set to touch. What proves that file
+right is the explicit `verify()` in `firebase_crashlytics_client_test.dart`,
+not mutation testing — the two tools are answering different questions here,
+not duplicating one.
+
+The remaining 6 survivors, individually accounted for, are all one family —
+code gated on `kReleaseMode`, a genuine Dart compile-time constant
+(`bool.fromEnvironment('dart.vm.product')`, inlined at compile time —
+structurally different from a runtime object graph like `Firebase.apps`,
+which is why that one no longer appears here) — plus one pre-existing,
+unrelated equivalent mutant:
+
+- **1**, `log_error_redactor.dart`'s trailing `return null;` — a true
+  equivalent mutant, not a gap: the enclosing function's return type is
+  nullable, so control falling off the end already returns `null`, identical
+  to the explicit statement deleted.
+- **2**, `LoggerAdapter.debug`'s `if (kReleaseMode) { return; }` — release-only
+  and already `// coverage:ignore`d; the underlying `Logger`'s own filter
+  already drops `debug` in release, so this guard exists only to skip
+  building the message, never to change what ships.
+- **3**, `_installErrorHandlers`'s `if (kReleaseMode) { FlutterError.onError =
+  handleFrameworkErrorForTest; }` — release-only and already
+  `// coverage:ignore`d, for the same reason: `kReleaseMode` cannot be flipped
+  under `flutter test`, so the *assignment* is dead in every test build even
+  though the handler *logic* it points at is fully tested directly (see
+  above).
+
+Every one of the 6 is already the subject of a `// coverage:ignore` pragma in
+the source, or — the redactor's `return null;` — already documented as a
+genuine equivalent mutant; none is new. Unlike the last release of this
+CHANGELOG entry, none is accepted on the strength of "this looks like the
+other one" — the `kReleaseMode` family is one fact (a compile-time constant
+with no test-time seam, full stop) applied three times, not three separate
+guesses, and the previous, weaker fourth item (the `hasFirebase` branch) is
+gone because it turned out to be fixable — see
+`buildCrashlyticsReportForTest` above.
+
 ## 0.4.0
 
 `LogSink` — a host app can now register a destination of its own, either

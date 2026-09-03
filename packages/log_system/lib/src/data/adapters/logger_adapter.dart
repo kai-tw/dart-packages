@@ -25,22 +25,32 @@ import '../log_data_source.dart';
 /// A `suppressInRelease` flag lived here briefly. It was dead: it gated levels
 /// the filter had already dropped.
 class LoggerAdapter extends LogDataSource {
-  LoggerAdapter();
+  /// [output] is a seam for this package's own tests only — production never
+  /// passes it, and `Logger`'s own default (`ConsoleOutput`, printing to the
+  /// system console) is what a null value falls back to, unchanged from
+  /// before this parameter existed. A test supplies `MemoryOutput()` to read
+  /// back what was actually printed — the only way to assert, rather than
+  /// merely assume, that this adapter forwards an error at full fidelity
+  /// while [FirebaseCrashlyticsAdapter] redacts the same object.
+  LoggerAdapter({LogOutput? output})
+    : _logger = Logger(
+        printer: PrettyPrinter(
+          excludePaths: <String>['package:log_system'],
+          methodCount: 50,
+          errorMethodCount: 50,
+        ),
+        output: output,
+      ),
+      _infoLogger = Logger(
+        printer: PrettyPrinter(
+          methodCount: 0,
+          excludePaths: <String>['package:log_system'],
+        ),
+        output: output,
+      );
 
-  final Logger _logger = Logger(
-    printer: PrettyPrinter(
-      excludePaths: <String>['package:log_system'],
-      methodCount: 50,
-      errorMethodCount: 50,
-    ),
-  );
-
-  final Logger _infoLogger = Logger(
-    printer: PrettyPrinter(
-      methodCount: 0,
-      excludePaths: <String>['package:log_system'],
-    ),
-  );
+  final Logger _logger;
+  final Logger _infoLogger;
 
   @override
   Future<void> debug(

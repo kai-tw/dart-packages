@@ -3,8 +3,10 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
 import 'data/adapters/firebase_crashlytics_adapter.dart';
+import 'data/adapters/firebase_crashlytics_client.dart';
 import 'data/adapters/log_error_redactor.dart';
 import 'data/adapters/logger_adapter.dart';
+import 'data/log_data_source.dart';
 import 'data/log_repository_impl.dart';
 import 'domain/log_repository.dart';
 import 'domain/log_sink.dart';
@@ -174,14 +176,24 @@ class LogSystem {
         // `reportCrashes: false` would leave the SDK default — on — and the
         // native layer captures a crash with no Dart code involved, so the
         // build that most wanted silence would be the one still reporting.
-        report: hasFirebase
-            ? FirebaseCrashlyticsAdapter(
-                FirebaseCrashlytics.instance,
-                enabled: reportCrashes && kReleaseMode,
-                customKeys: customKeys,
-                deferredCustomKeys: deferredCustomKeys,
-              )
-            : null,
+        report: buildCrashlyticsReportForTest(
+          hasFirebase: hasFirebase,
+          reportCrashes: reportCrashes,
+          customKeys: customKeys,
+          deferredCustomKeys: deferredCustomKeys,
+          // coverage:ignore-start
+          // `FirebaseCrashlytics.instance` resolves a real plugin singleton:
+          // reaching it needs a registered `FirebaseCrashlyticsPlatform`,
+          // which in a pure-Dart test binary fails an internal plugin
+          // assertion (`pluginConstants['isCrashlyticsCollectionEnabled'] !=
+          // null`) the moment anything calls a method on the client this
+          // builds — see `buildCrashlyticsReportForTest`'s own doc for why
+          // that assertion is structurally unreachable from here, and for
+          // everything this one line is not responsible for proving.
+          clientFactory: () =>
+              FirebaseCrashlyticsClient.wrapping(FirebaseCrashlytics.instance),
+          // coverage:ignore-end
+        ),
       ),
     );
 
@@ -198,8 +210,75 @@ class LogSystem {
     }
   }
 
+  /// The decision [init] makes for the crash-reporter destination —
+  /// extracted for the same reason [handleFrameworkErrorForTest] is: so this
+  /// package's own tests can reach it directly, with [clientFactory] standing
+  /// in for the one call [init] cannot make under `flutter test`.
+  ///
+  /// This is not the `LogRepository` seam this package's `CLAUDE.md` refuses
+  /// to open. That refusal is about exposing *which internal destination a
+  /// level reached* — the graph a caller could wire wrong. This exposes
+  /// *whether and how the report destination gets built* for one already-
+  /// public constructor ([FirebaseCrashlyticsAdapter]) — the same shape as
+  /// injecting a collaborator, not as widening what a level can reach.
+  ///
+  /// Splitting the seam here, at [clientFactory], rather than one level up at
+  /// `report:` itself, is deliberate: `hasFirebase`, `reportCrashes &&
+  /// kReleaseMode`, and forwarding `customKeys`/`deferredCustomKeys` are this
+  /// method's own logic, not the SDK's, and a test exercising them should not
+  /// have to stand up a fake `FirebaseCrashlyticsPlatform` to do it — [init]
+  /// passes a fake [FirebaseCrashlyticsClient] instead, no different from how
+  /// `firebase_crashlytics_adapter_test.dart` tests
+  /// [FirebaseCrashlyticsAdapter] itself.
+  ///
+  /// What stays genuinely out of reach is narrower than it looks: not
+  /// "anything Firebase", just the one thing [clientFactory] wraps at its own
+  /// call site in [init] — a *method call* on the real
+  /// `FirebaseCrashlytics.instance`. Reading `Firebase.apps` (what
+  /// `hasFirebase` is) is a plain, swappable object graph and is exercised
+  /// for real below with a fake `FirebasePlatform`; even
+  /// `FirebaseCrashlytics.instance` itself resolves safely against that same
+  /// fake, since the getter only wraps a `FirebaseApp` reference. The wall is
+  /// one field deeper: `FirebaseCrashlyticsPlatform.instanceFor` — reached the
+  /// moment any method is called on that client — asserts
+  /// `pluginConstants['isCrashlyticsCollectionEnabled'] != null`, and
+  /// `pluginConstants` reads a `static` field private to
+  /// `firebase_core_platform_interface` that only the real native
+  /// `Firebase#initializeCore` channel response ever populates. No object
+  /// substitution reaches a private field in a package this one does not
+  /// own; only re-implementing that plugin's own native handshake would, and
+  /// that is testing the SDK, not this package.
+  @visibleForTesting
+  static LogDataSource? buildCrashlyticsReportForTest({
+    required bool hasFirebase,
+    required bool reportCrashes,
+    required Map<String, String> customKeys,
+    required Future<Map<String, String>> Function()? deferredCustomKeys,
+    required FirebaseCrashlyticsClient Function() clientFactory,
+  }) {
+    if (!hasFirebase) {
+      return null;
+    }
+    return FirebaseCrashlyticsAdapter(
+      clientFactory(),
+      enabled: reportCrashes && kReleaseMode,
+      customKeys: customKeys,
+      deferredCustomKeys: deferredCustomKeys,
+    );
+  }
+
   /// The two handlers every uncaught throw arrives at, wired once here so two
   /// apps cannot drift apart on the judgements they involve. They did.
+  ///
+  /// Both handler bodies are extracted to [handleFrameworkErrorForTest] and
+  /// [handleAsyncErrorForTest] rather than written inline, and the reason is
+  /// the first of the two gates below: `kReleaseMode` is a compile-time
+  /// constant, always false in a `flutter test` binary, so the assignment
+  /// this method makes under `if (kReleaseMode)` never runs there — a test
+  /// cannot flip the constant, and therefore cannot reach an inline closure's
+  /// body at all. Extracted as ordinary static methods, this package's own
+  /// tests can call the logic directly, bypassing the release gate that only
+  /// decides *whether Flutter should wire it up*, never what it does.
   static void _installErrorHandlers() {
     // Release only. In debug `FlutterError.onError` already defaults to
     // `FlutterError.presentError`, so overriding it there reimplements the
@@ -212,44 +291,74 @@ class LogSystem {
     // it would put the raw exception on logcat / oslog — the object the
     // redaction exists to stop, reaching a different sink.
     if (kReleaseMode) {
-      FlutterError.onError = (FlutterErrorDetails details) {
-        // `details.silent` is the framework's own fatal/non-fatal signal, set
-        // at the throw site: "errors that could be triggered by environmental
-        // conditions (as opposed to logic errors)". The HTTP library sets it
-        // so a 404 on flaky wifi does not read like a bug, and the framework
-        // honours it in `dumpErrorToConsole`. FlutterFire's
-        // `recordFlutterError` never looks at it, which is how its documented
-        // pattern files every one of them as a crash — and `fatal: true` feeds
-        // crash-free users, the number a release is judged by.
-        //
-        // `details.exception` rather than `details` is also what drops
-        // `context` and `informationCollector`, both `DiagnosticsNode`s that
-        // can carry widget-tree property values.
-        if (details.silent) {
-          error(
-            'flutter: environmental framework error',
-            error: details.exception,
-            stackTrace: details.stack,
-          );
-          return;
-        }
-        fatal(
-          'flutter: uncaught framework error',
-          error: details.exception,
-          stackTrace: details.stack,
-        );
-      };
+      // coverage:ignore-start
+      // The assignment itself is release-only by the same `kReleaseMode`
+      // gate as the handler it installs, so it can no more be exercised
+      // under `flutter test` than the body it points at — see
+      // `handleFrameworkErrorForTest` for where that body is actually
+      // tested.
+      FlutterError.onError = handleFrameworkErrorForTest;
+      // coverage:ignore-end
     }
 
     // Unconditional, because Flutter installs nothing here by default.
-    //
-    // Not fatal, and there is no `silent` to consult on this path. `return
-    // true` says the app has handled the error and will keep running, so
-    // filing it as a crash would contradict the line above it.
-    PlatformDispatcher.instance.onError = (Object err, StackTrace stack) {
-      error('uncaught async error', error: err, stackTrace: stack);
-      return true;
-    };
+    PlatformDispatcher.instance.onError = handleAsyncErrorForTest;
+  }
+
+  /// The logic `FlutterError.onError` runs in release builds — see
+  /// [_installErrorHandlers] for why it lives here as an ordinary method
+  /// instead of a closure inline in that gate.
+  ///
+  /// Not a test seam grafted on afterwards: this **is** the production
+  /// handler, reached in a release build through the tear-off
+  /// `_installErrorHandlers` assigns. `ForTest` in the name is honest about
+  /// the *reason* it is a named method and not a closure — a closure could
+  /// not be reached from outside its own release-only assignment — while
+  /// [visibleForTesting] says the same about who besides this package's own
+  /// tests should ever call it directly: nobody. It is not exported from the
+  /// public barrel.
+  ///
+  /// `details.silent` is the framework's own fatal/non-fatal signal, set at
+  /// the throw site: "errors that could be triggered by environmental
+  /// conditions (as opposed to logic errors)". The HTTP library sets it so a
+  /// 404 on flaky wifi does not read like a bug, and the framework honours it
+  /// in `dumpErrorToConsole`. FlutterFire's `recordFlutterError` never looks
+  /// at it, which is how its documented pattern files every one of them as a
+  /// crash — and `fatal: true` feeds crash-free users, the number a release
+  /// is judged by.
+  ///
+  /// `details.exception` rather than `details` is also what drops `context`
+  /// and `informationCollector`, both `DiagnosticsNode`s that can carry
+  /// widget-tree property values.
+  @visibleForTesting
+  static void handleFrameworkErrorForTest(FlutterErrorDetails details) {
+    if (details.silent) {
+      error(
+        'flutter: environmental framework error',
+        error: details.exception,
+        stackTrace: details.stack,
+      );
+      return;
+    }
+    fatal(
+      'flutter: uncaught framework error',
+      error: details.exception,
+      stackTrace: details.stack,
+    );
+  }
+
+  /// The logic `PlatformDispatcher.instance.onError` runs, unconditionally —
+  /// see [handleFrameworkErrorForTest] for why this is a named method and
+  /// what [visibleForTesting] means here.
+  ///
+  /// Not fatal, and there is no `silent` to consult on this path. `return
+  /// true` says the app has handled the error and will keep running, so
+  /// filing it as a crash would contradict [handleFrameworkErrorForTest]'s
+  /// `fatal:` branch.
+  @visibleForTesting
+  static bool handleAsyncErrorForTest(Object err, StackTrace stack) {
+    error('uncaught async error', error: err, stackTrace: stack);
+    return true;
   }
 
   /// Wires a repository directly, for **this package's own tests**.

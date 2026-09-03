@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
 import '../log_data_source.dart';
+import 'firebase_crashlytics_client.dart';
 import 'log_error_redactor.dart';
 
 /// Crash-reporter sink. Everything that leaves the device does so from here.
@@ -17,9 +17,15 @@ import 'log_error_redactor.dart';
 /// - **redaction** ([LogErrorRedactor]). No caller can opt out; the error
 ///   object is reduced on the way through, so an exception whose `toString()`
 ///   carries a customer name or a key reaches the sink as its type name.
+///
+/// Takes a [FirebaseCrashlyticsClient] rather than the SDK's
+/// `FirebaseCrashlytics` directly — see that type's doc for why. Everything
+/// below is this file's actual job: enabled-gating, message formatting,
+/// which level maps to which client call. None of it is about the SDK's
+/// shape, which is exactly what the split makes visible.
 class FirebaseCrashlyticsAdapter extends LogDataSource {
   FirebaseCrashlyticsAdapter(
-    this._instance, {
+    this._client, {
     bool? enabled,
     Map<String, String> customKeys = const <String, String>{},
     Future<Map<String, String>> Function()? deferredCustomKeys,
@@ -29,7 +35,7 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
     // uncaught crash is captured by the native layer with no Dart code
     // involved. An app that leaves the SDK's default on ships debug-run
     // crashes to the same project as real ones.
-    unawaited(_instance.setCrashlyticsCollectionEnabled(this.enabled));
+    unawaited(_client.setCrashlyticsCollectionEnabled(this.enabled));
 
     if (!this.enabled) {
       return;
@@ -40,7 +46,7 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
     // because every source of them (a generated BuildInfo, package_info_plus)
     // is a dependency one consumer has and another does not.
     for (final MapEntry<String, String> entry in customKeys.entries) {
-      unawaited(_instance.setCustomKey(entry.key, entry.value));
+      unawaited(_client.setCustomKey(entry.key, entry.value));
     }
     // Unawaited, and separate, because it needs a platform round-trip: it
     // lands a moment after launch and a crash in the first frames may miss it.
@@ -51,7 +57,7 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
     }
   }
 
-  final FirebaseCrashlytics _instance;
+  final FirebaseCrashlyticsClient _client;
 
   /// Whether anything leaves the device at all.
   final bool enabled;
@@ -61,7 +67,7 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
   ) async {
     final Map<String, String> keys = await resolve();
     for (final MapEntry<String, String> entry in keys.entries) {
-      await _instance.setCustomKey(entry.key, entry.value);
+      await _client.setCustomKey(entry.key, entry.value);
     }
   }
 
@@ -89,7 +95,7 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
     // pretending otherwise. It gated this level and not `warning`, which
     // carries the identical hazard, so turning it off looked like protection
     // and was half of one.
-    return _instance.log('Info: $message');
+    return _client.log('Info: $message');
   }
 
   @override
@@ -111,7 +117,7 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
     if (stackTrace != null) {
       buffer.write('\n$stackTrace');
     }
-    return _instance.log(buffer.toString());
+    return _client.log(buffer.toString());
   }
 
   @override
@@ -123,7 +129,7 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
     if (!enabled) {
       return;
     }
-    return _instance.recordError(
+    return _client.recordError(
       LogErrorRedactor.redact(error),
       stackTrace,
       reason: message,
@@ -145,7 +151,7 @@ class FirebaseCrashlyticsAdapter extends LogDataSource {
     if (!enabled) {
       return;
     }
-    return _instance.recordError(
+    return _client.recordError(
       LogErrorRedactor.redact(error),
       stackTrace,
       reason: message,

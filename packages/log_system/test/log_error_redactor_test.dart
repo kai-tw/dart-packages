@@ -44,6 +44,27 @@ void main() {
       );
     });
 
+    test('exactly three fields is still allowed — the boundary itself', () {
+      LogErrorRedactor.describeExtra = (Object error) => 'a b c';
+      expect(
+        LogErrorRedactor.redact(const _Domain()).toString(),
+        '_Domain a b c',
+      );
+    });
+
+    test('four fields is gated — one past the boundary', () {
+      LogErrorRedactor.describeExtra = (Object error) => 'a b c d';
+      expect(LogErrorRedactor.redact(const _Domain()).toString(), '_Domain');
+    });
+
+    test('a bare backslash with nothing else present is still gated', () {
+      // Isolates one clause of `field.contains(r'\') || field.contains('\n')`:
+      // a value with no space, no slash and no newline, but a backslash,
+      // must still be caught by that clause alone.
+      LogErrorRedactor.describeExtra = (Object error) => r'a\b';
+      expect(LogErrorRedactor.redact(const _Domain()).toString(), '_Domain');
+    });
+
     test('returning null falls through to the built-in arms', () {
       LogErrorRedactor.describeExtra = (Object error) => null;
       expect(
@@ -77,6 +98,15 @@ void main() {
     test('a describer that returns an over-long value is still gated', () {
       LogErrorRedactor.describeExtra = (Object error) => 'a' * 49;
       expect(LogErrorRedactor.redact(const _Domain()).toString(), '_Domain');
+    });
+
+    test('exactly 48 characters is still allowed — the boundary itself', () {
+      final String value = 'a' * 48;
+      LogErrorRedactor.describeExtra = (Object error) => value;
+      expect(
+        LogErrorRedactor.redact(const _Domain()).toString(),
+        '_Domain $value',
+      );
     });
   });
 
@@ -208,6 +238,24 @@ void main() {
         'PlatformException',
       );
     });
+
+    test('exactly 48 characters still survives — the boundary itself', () {
+      final String code = 'a' * 48;
+      expect(
+        LogErrorRedactor.redact(PlatformException(code: code)).toString(),
+        'PlatformException code=$code',
+      );
+    });
+
+    test('a code with nothing but a backslash still degrades', () {
+      // Isolates one clause of `contains(r'\') || contains('\n')`: no space,
+      // no slash, no newline, but a backslash — that clause alone must catch
+      // it.
+      expect(
+        LogErrorRedactor.redact(PlatformException(code: r'a\b')).toString(),
+        'PlatformException',
+      );
+    });
   });
 
   group('LoggableException — the template an app extends', () {
@@ -237,6 +285,20 @@ void main() {
       expect(
         LogErrorRedactor.redact(const _CloudSocketException(-1)).toString(),
         '_CloudSocketException',
+      );
+    });
+
+    test('the band edges themselves survive — 0 and 65535', () {
+      // `(code < 0 || code > 65535)`: -1 and 1700000000 above only prove the
+      // OUTSIDE of the band is rejected. These two are the innermost values
+      // still IN the band, which is what pins `<`/`>` against `<=`/`>=`.
+      expect(
+        LogErrorRedactor.redact(const _CloudSocketException(0)).toString(),
+        '_CloudSocketException code=0',
+      );
+      expect(
+        LogErrorRedactor.redact(const _CloudSocketException(65535)).toString(),
+        '_CloudSocketException code=65535',
       );
     });
 
