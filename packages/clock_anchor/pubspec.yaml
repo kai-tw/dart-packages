@@ -1,0 +1,32 @@
+name: clock_anchor
+description: >-
+  Wall-clock time an app can still act on when the device clock cannot be
+  trusted — anchored to a remote source through a monotonic base, with
+  rollback detection and a repair policy for stamps written while the clock
+  was wrong.
+version: 0.1.0
+repository: https://github.com/kai-tw/kai-packages/tree/main/packages/clock_anchor
+issue_tracker: https://github.com/kai-tw/kai-packages/issues
+
+environment:
+  sdk: ^3.8.0
+
+resolution: workspace
+
+dependencies:
+  clock: ^1.1.2
+
+dev_dependencies:
+  # Path, not a version: the HLC integration test is the whole point of the
+  # package — "a wall clock the user moves cannot move an HLC stamp" is a
+  # claim about the two together, and a test that fakes the clock proves
+  # nothing about the real `HlcClockImpl`. Both members resolve against the
+  # workspace lockfile, and neither package is published to pub.dev (consumers
+  # pin them by git tag), so a path dev-dependency costs nothing downstream.
+  hybrid_logical_clock:
+    path: ../hybrid_logical_clock
+  lints: ^6.1.0
+  # Same floor, and for the same reason, as hybrid_logical_clock's: a Flutter
+  # member's `flutter_test` pins `test_api` to whatever the installed SDK
+  # ships, and 1.31.2 wants a newer one than that.
+  test: ">=1.25.0 <2.0.0"
