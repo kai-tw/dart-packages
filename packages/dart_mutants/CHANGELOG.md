@@ -1,3 +1,37 @@
+## 0.2.5
+
+`invalidMutants` — an invalid mutant is now reported with its identity, not
+just counted. Behaviour is unchanged: the compile-safety gate still rejects
+it before the test command ever sees it, it is still excluded from `total`,
+and `invalid` still increments exactly as before. Only the report gained
+something.
+
+The same shape of gap `timedOutMutants` (0.2.1) closed, on the other bucket
+this package excludes from scoring. A consuming session's report read
+`invalid: 27` with no per-file breakdown — unlike `undetectedMutants` and
+`timedOutMutants`, there was nothing to read off per mutant — and had to
+fall back to guessing which lines from the shape of the file's code, calling
+it out explicitly as a reasonable guess rather than a verified one, because
+naming them for real meant spending a whole extra mutation run just to
+reverse-engineer which ones they were.
+
+`FileMutationReport`'s doc used to argue the asymmetry was the point: an
+invalid mutant is not legal code and never needed measuring, so there was
+supposedly nothing there to go and look at. That conflated two different
+questions. Whether an invalid mutant should move the score is a scoring
+question, and the answer stays no — `total` is unchanged. Whether its
+identity is worth keeping in the report is a different, reporting question,
+and the answer is yes for exactly the reason it is yes for a timeout: a bare
+count cannot tell a caller — or an agent reading the report — a handful of
+unrelated one-off rejections from one operator consistently misfiring
+against a single construct in one file, and it cannot point at a single
+line to go check.
+
+`invalidMutants` carries the same shape as `timedOutMutants` — file, line,
+column, operator, description — via the same `MutantResult`. The CLI's text
+output gains a matching `invalid (NOT scored):` line alongside the existing
+`undetected:` and `timed out (NOT scored):` ones.
+
 ## 0.2.4
 
 Docs only; no behaviour change, and **no change to the engine version

@@ -279,14 +279,25 @@ void main() {
     );
 
     test(
-      '[boundary] `invalid` deliberately gets no such list — an invalid '
-      'mutant is not legal code, so there is nothing to go and look at',
+      '[boundary] an invalid mutant is reported with its IDENTITY, not just '
+      'counted — a count says the gate rejected something without saying '
+      'what, so nobody can tell a handful of one-off rejections from one '
+      'operator consistently misfiring against this file',
       () {
         final FileMutationReport f = _reportFor(report, 'invalid.dart');
 
-        expect(f.invalid, 1);
-        // The asymmetry is the point: only mutants that were REAL CODE and
-        // went unmeasured earn an identity list.
+        expect(f.invalidMutants, hasLength(f.invalid));
+        final MutantResult r = f.invalidMutants.single;
+        expect(r.verdict, MutantVerdict.invalid);
+        expect(r.mutant.line, greaterThan(0));
+        expect(
+          r.mutant.description,
+          isNotEmpty,
+          reason: 'a caller has to be able to map this back to a source line',
+        );
+        // Still no identity list for the good outcome — nobody needs to know
+        // which mutants a test suite successfully caught, only which ones it
+        // didn't or couldn't.
         expect(f.timedOutMutants, isEmpty);
       },
     );

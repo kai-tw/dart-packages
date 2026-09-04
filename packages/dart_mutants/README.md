@@ -117,8 +117,8 @@ Which files to run against, how big a mutant budget to spend, what
 detection rate is acceptable, and what a surviving mutant's write-up should
 look like are policy — that lives one layer up, in whatever calls this. The
 contract here is a file list and a test command in, per-file
-detected/undetected/invalid/timeout counts and the actual undetected
-mutants out.
+detected/undetected/invalid/timeout counts and the actual undetected,
+invalid, and timed-out mutants out.
 
 ## The output contract
 
@@ -140,32 +140,40 @@ real CLI binary, not just the internal report types:
   or `timeout` has a hollow-looking 100% the same way a file with only one
   real mutant does — comparing either against `total` is how a policy layer
   catches that, so both are reported, not just counted internally.
-- **A timed-out mutant is reported with its identity**, in
-  `timedOutMutants`, alongside the count. Comparing the count against `total`
-  tells a caller THAT something went unmeasured and never WHICH, so on its own
-  it is a number nobody can act on: you cannot see which line, whether it is
-  the same mutant every run, or go and look at it. Measured — a file carried a
-  mutant that timed out on *every* round, was therefore never scored once, and
-  stayed invisible behind that count. `invalid` deliberately gets no such
-  list: an invalid mutant is not legal code, so nothing went unmeasured that
-  anyone could inspect.
+- **A timed-out or invalid mutant is reported with its identity**, in
+  `timedOutMutants` and `invalidMutants`, alongside their counts. Comparing
+  either count against `total` tells a caller THAT something was excluded
+  from the score and never WHICH, so on its own a count is a number nobody
+  can act on: you cannot see which line, whether it is the same mutant every
+  run, or go and look at it.
 
-  A timeout is excluded from the numerator *and* the denominator, so it moves
-  the score in **either** direction and you cannot tell which without running
-  the mutant: had it been detected, excluding it lowers the score; had it been
-  undetected, excluding it raises one. Both measured, on two files of one
-  consuming PR — 71% with a timeout at a 90s budget against 75% with none at
-  300s (the mutant resolved to detected and rejoined the denominator), and, in
-  the direction that shipped, a file reading **PASS 100% with two of its three
-  mutants timed out** at the 30s default, which reported FAIL 33% at 90s once
-  all three scored. A percentage computed from one surviving mutant is not a
-  percentage — and catching that is a policy layer's job, not this one's: it
-  is the caller who knows what threshold it is gating on and can therefore
-  tell that a thin denominator has not measured anything. Raising the budget
-  is not a
-  substitute for the list: it identifies the mutant only when the timeout
-  disappears, and tells you nothing at all about one that genuinely does not
-  terminate.
+  Measured, twice, for two different reasons. A file carried a mutant that
+  timed out on *every* round, was therefore never scored once, and stayed
+  invisible behind that count. Separately, a report reading `invalid: 27`
+  with no per-file breakdown left a caller unable to name even one of the 27
+  without spending a whole extra mutation run to reverse-engineer which
+  lines they were — an invalid mutant is not legal code and was never going
+  to move the score, but the gate rejecting it is still a fact about that
+  line, and a bare integer cannot say which ones, or surface an operator
+  that is consistently misfiring against one file.
+
+  A timeout specifically is excluded from the numerator *and* the
+  denominator, so it moves the score in **either** direction and you cannot
+  tell which without running the mutant: had it been detected, excluding it
+  lowers the score; had it been undetected, excluding it raises one. (An
+  invalid mutant carries no equivalent ambiguity — it was never legal code,
+  so it was never going to land on either side.) Both measured, on two files
+  of one consuming PR — 71% with a timeout at a 90s budget against 75% with
+  none at 300s (the mutant resolved to detected and rejoined the
+  denominator), and, in the direction that shipped, a file reading **PASS
+  100% with two of its three mutants timed out** at the 30s default, which
+  reported FAIL 33% at 90s once all three scored. A percentage computed from
+  one surviving mutant is not a percentage — and catching that is a policy
+  layer's job, not this one's: it is the caller who knows what threshold it
+  is gating on and can therefore tell that a thin denominator has not
+  measured anything. Raising the budget is not a substitute for the list: it
+  identifies the mutant only when the timeout disappears, and tells you
+  nothing at all about one that genuinely does not terminate.
 - **A path comes back exactly as it was passed in.** Paths are echoed, never
   normalised — pass `lib/foo.dart` and the report says `lib/foo.dart`; pass
   it absolute and the report says it absolute. This matters more than it
