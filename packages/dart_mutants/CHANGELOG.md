@@ -1,4 +1,4 @@
-## 0.2.5
+## 0.2.6
 
 **Fixes a false negative**: a mutant that a project's real test suite
 genuinely kills could be scored `undetected` anyway, silently, with no
@@ -36,9 +36,62 @@ Re-ran the exact 24-file `clock_anchor` batch that exposed the bug as the
 definitive check: `ntp_packet.dart` now scores `41/41` (was `40/41`), and
 every other file's numbers are unchanged.
 
-**No change to the CLI, JSON report shape, or the engine version
-`plan-mutation` requires** — its floor stays at 0.2.3. A caller who was
-already correct sees only a slower, now-trustworthy run.
+**No change to the CLI or JSON report shape** beyond what 0.2.5 already made,
+and **no change to the engine version `plan-mutation` requires** — its floor
+stays at 0.2.3. A caller who was already correct sees only a slower,
+now-trustworthy run.
+
+This package's own coverage and mutation score had never been measured
+against itself before this release: 85.5% line coverage, 73.1% mutation,
+below the bar every other package in this workspace is now held to. Brought
+up to match — dedicated tests for the small report/data classes
+(`MutantResult`, `MutationRunReport`, `FileMutationReport`,
+`isGeneratedFile`), nested-construct recursion tests for the AST-walking
+operators, `MutatedFileRegistry`'s `handleSignal()` extracted as a directly
+testable seam, and new tests for `ProcessCommand.killAllRunning()`/
+`toString()`/pipe-buffer draining and for `MutationTestRunner`'s
+caller-supplied operator list, cache-clearing, and hung-baseline paths —
+several confirmed empirically by reintroducing the target mutant and
+watching the new test fail. What remains uncovered is a small, individually
+justified set of process-boundary and platform-gated lines (a real
+`SIGINT`/`SIGTERM` handler body, a Windows-only exception branch, a missing-
+`ps` fallback) that cannot be reached from inside this process's own test
+suite without either ending it or running on a platform this package is not
+developed on; each carries a `coverage:ignore` naming exactly why.
+
+## 0.2.5
+
+`invalidMutants` — an invalid mutant is now reported with its identity, not
+just counted. Behaviour is unchanged: the compile-safety gate still rejects
+it before the test command ever sees it, it is still excluded from `total`,
+and `invalid` still increments exactly as before. Only the report gained
+something.
+
+The same shape of gap `timedOutMutants` (0.2.1) closed, on the other bucket
+this package excludes from scoring. A consuming session's report read
+`invalid: 27` with no per-file breakdown — unlike `undetectedMutants` and
+`timedOutMutants`, there was nothing to read off per mutant — and had to
+fall back to guessing which lines from the shape of the file's code, calling
+it out explicitly as a reasonable guess rather than a verified one, because
+naming them for real meant spending a whole extra mutation run just to
+reverse-engineer which ones they were.
+
+`FileMutationReport`'s doc used to argue the asymmetry was the point: an
+invalid mutant is not legal code and never needed measuring, so there was
+supposedly nothing there to go and look at. That conflated two different
+questions. Whether an invalid mutant should move the score is a scoring
+question, and the answer stays no — `total` is unchanged. Whether its
+identity is worth keeping in the report is a different, reporting question,
+and the answer is yes for exactly the reason it is yes for a timeout: a bare
+count cannot tell a caller — or an agent reading the report — a handful of
+unrelated one-off rejections from one operator consistently misfiring
+against a single construct in one file, and it cannot point at a single
+line to go check.
+
+`invalidMutants` carries the same shape as `timedOutMutants` — file, line,
+column, operator, description — via the same `MutantResult`. The CLI's text
+output gains a matching `invalid (NOT scored):` line alongside the existing
+`undetected:` and `timed out (NOT scored):` ones.
 
 ## 0.2.4
 

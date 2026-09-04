@@ -41,11 +41,16 @@ jobs:
       - run: dart test
         working-directory: packages/dart_lints
 
-      # Its own dart_test.yaml pins concurrency: 1 and a 4x timeout — most of
-      # this suite spins up a real temp package and runs real subprocesses
-      # (dart pub get / analyze / test) against it, each now a cold compile
-      # by design (see TestCompilationCache), so this step is the slowest one
-      # here. That is the accepted trade, not a flake to chase.
+      # Added after dart_lints on purpose — dart_mutants is declared in the
+      # same place for the same reason (see pubspec.yaml's dev_dependencies
+      # comment) and, like clock_anchor before it, had no step of its own
+      # here, so its suite silently never ran in CI. That suite drives real
+      # subprocesses (dart pub get, dart analyze, dart test, SIGTERM/SIGKILL)
+      # rather than mocking any of them, so it is the slowest package step in
+      # this job — and its own dart_test.yaml pins concurrency: 1 and a 4x
+      # timeout on top of that, because each of those subprocess runs is now
+      # a cold compile by design (see TestCompilationCache). That is the
+      # accepted trade, not a flake to chase.
       - run: dart test
         working-directory: packages/dart_mutants
 

@@ -117,6 +117,7 @@ class MutationTestRunner {
     int invalid = 0;
     int timedOut = 0;
     final List<MutantResult> undetectedResults = <MutantResult>[];
+    final List<MutantResult> invalidResults = <MutantResult>[];
     final List<MutantResult> timedOutResults = <MutantResult>[];
 
     for (final Mutant mutant in mutants) {
@@ -124,6 +125,11 @@ class MutationTestRunner {
       switch (verdict) {
         case MutantVerdict.invalid:
           invalid++;
+          // Kept, not just counted — same reasoning as timedOutResults
+          // below: a bare count cannot tell a caller which lines the
+          // compile-safety gate rejected, or whether 27 of them share one
+          // cause.
+          invalidResults.add(MutantResult(mutant: mutant, verdict: verdict));
         case MutantVerdict.timeout:
           timedOut++;
           // Kept, not just counted. A timed-out mutant is real code that went
@@ -150,6 +156,7 @@ class MutationTestRunner {
       invalid: invalid,
       timedOut: timedOut,
       undetectedMutants: undetectedResults,
+      invalidMutants: invalidResults,
       timedOutMutants: timedOutResults,
     );
   }
