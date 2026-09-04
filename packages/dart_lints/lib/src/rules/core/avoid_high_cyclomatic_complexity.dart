@@ -270,7 +270,9 @@ class _Visitor extends LintVisitor {
 
   /// True when [body] is nothing but one exhaustive switch or try/catch —
   /// see the class doc's [AvoidHighCyclomaticComplexity.exemptFlatDispatch]
-  /// section for exactly what that requires.
+  /// section for exactly what that requires. Split across three named
+  /// pieces below — the shape this rule's own message asks for — rather
+  /// than one function walking every case itself.
   bool _isFlatDispatch(FunctionBody body) {
     if (body is ExpressionFunctionBody) {
       final Expression e = body.expression;
@@ -279,7 +281,13 @@ class _Visitor extends LintVisitor {
     if (body is! BlockFunctionBody) {
       return false;
     }
-    final NodeList<Statement> statements = body.block.statements;
+    return _isFlatDispatchBlock(body.block.statements);
+  }
+
+  /// True when [statements] — after skipping any leading local declarations
+  /// that are themselves branch-free — end in exactly one clean dispatch
+  /// statement.
+  bool _isFlatDispatchBlock(NodeList<Statement> statements) {
     if (statements.isEmpty) {
       return false;
     }
@@ -295,16 +303,21 @@ class _Visitor extends LintVisitor {
       // the whole story.
       return false;
     }
-    final Statement last = statements[i];
-    if (last is ReturnStatement) {
-      final Expression? e = last.expression;
+    return _isCleanDispatchStatement(statements[i]);
+  }
+
+  /// True when [statement] is itself one clean switch or try/catch — the
+  /// three shapes a flat dispatch's final statement may take.
+  bool _isCleanDispatchStatement(Statement statement) {
+    if (statement is ReturnStatement) {
+      final Expression? e = statement.expression;
       return e is SwitchExpression && _isCleanSwitchExpression(e);
     }
-    if (last is SwitchStatement) {
-      return _isCleanSwitchStatement(last);
+    if (statement is SwitchStatement) {
+      return _isCleanSwitchStatement(statement);
     }
-    if (last is TryStatement) {
-      return _isCleanTry(last);
+    if (statement is TryStatement) {
+      return _isCleanTry(statement);
     }
     return false;
   }

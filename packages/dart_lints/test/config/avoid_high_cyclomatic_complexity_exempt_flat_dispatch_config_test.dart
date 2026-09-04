@@ -28,7 +28,7 @@ String label(E x) {
 }
 ''';
 
-  Directory _tempRoot(String prefix) {
+  Directory tempRoot(String prefix) {
     final Directory root = Directory.systemTemp.createTempSync(prefix);
     File(p.join(root.path, 'pubspec.yaml')).writeAsStringSync('name: myapp\n');
     final Directory libDir = Directory(p.join(root.path, 'lib'))
@@ -43,7 +43,7 @@ String label(E x) {
     'exemptFlatDispatch: true, read from real YAML, suppresses a flat '
     'switch that would otherwise violate maxComplexity',
     () async {
-      final Directory root = _tempRoot('dart_lints_flat_dispatch_on_');
+      final Directory root = tempRoot('dart_lints_flat_dispatch_on_');
       addTearDown(() => root.deleteSync(recursive: true));
 
       const String config = '''
@@ -101,7 +101,7 @@ areas:
     'exemptFlatDispatch defaulting to false (option omitted), read from '
     'real YAML, still reports the same flat switch',
     () async {
-      final Directory root = _tempRoot('dart_lints_flat_dispatch_default_');
+      final Directory root = tempRoot('dart_lints_flat_dispatch_default_');
       addTearDown(() => root.deleteSync(recursive: true));
 
       const String config = '''
@@ -158,7 +158,7 @@ areas:
     'a non-boolean exemptFlatDispatch value is rejected while loading, '
     'naming the option rather than miscoercing',
     () {
-      final Directory root = _tempRoot('dart_lints_flat_dispatch_bad_type_');
+      final Directory root = tempRoot('dart_lints_flat_dispatch_bad_type_');
       addTearDown(() => root.deleteSync(recursive: true));
 
       const String config = '''
