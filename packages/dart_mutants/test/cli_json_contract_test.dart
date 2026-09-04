@@ -165,5 +165,13 @@ void main() {
         <String>[absolute],
       );
     },
+    // This one test drives the real CLI binary to completion TWICE
+    // (relative path, then absolute), each its own full baseline-plus-mutant
+    // run through real `dart pub get`/`analyze`/`test` subprocesses — roughly
+    // double the single-run cost the package default (30s) is sized for.
+    // Measured at ~19s for one run alone; the two together tripped the
+    // default, which is a test-runtime ceiling, not a `dart_mutants` gate —
+    // unlike `--mutant-timeout`, doubling it cannot hide a genuine hang here.
+    timeout: const Timeout(Duration(seconds: 90)),
   );
 }

@@ -41,6 +41,16 @@ jobs:
       - run: dart test
         working-directory: packages/dart_lints
 
+      # Added after dart_lints on purpose — dart_mutants is declared in the
+      # same place for the same reason (see pubspec.yaml's dev_dependencies
+      # comment) and, like clock_anchor before it, had no step of its own
+      # here, so its suite silently never ran in CI. That suite drives real
+      # subprocesses (dart pub get, dart analyze, dart test, SIGTERM/SIGKILL)
+      # rather than mocking any of them, so it is the slowest package step in
+      # this job.
+      - run: dart test
+        working-directory: packages/dart_mutants
+
       - run: dart test
         working-directory: packages/hybrid_logical_clock
 

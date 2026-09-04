@@ -57,6 +57,35 @@ void main() {
 void main() {}
 ''');
 
+  // detected_and_undetected.dart: ONE file where detected AND undetected
+  // are BOTH nonzero. Every other fixture in this suite has one side or the
+  // other at zero, which means `total = detected + undetected` computes the
+  // exact same number as `detected - undetected` everywhere else in this
+  // file. Measured: that gap let `total`'s own `+` mutate to `-` and come
+  // back completely unnoticed the first time this file's own operators were
+  // run against it for real, because nothing here could tell addition from
+  // subtraction. `covered`'s ternary is exercised both ways (its mutant is
+  // detected); `uncovered`'s is never called at all (its mutant is not).
+  File(
+    p.join(dir.path, 'lib', 'detected_and_undetected.dart'),
+  ).writeAsStringSync('''
+String covered(bool isPositive) => isPositive ? 'positive' : 'negative';
+String uncovered(bool isPositive) => isPositive ? 'positive' : 'negative';
+''');
+  File(
+    p.join(dir.path, 'test', 'detected_and_undetected_test.dart'),
+  ).writeAsStringSync('''
+import 'package:fixture/detected_and_undetected.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('covered', () {
+    expect(covered(true), 'positive');
+    expect(covered(false), 'negative');
+  });
+}
+''');
+
   // invalid.dart: a `??` whose "left alone" mutant is a guaranteed compile
   // error (String? returned from an explicitly non-nullable String), and
   // whose "fallback alone" mutant compiles fine and is caught by the test.
@@ -77,6 +106,79 @@ void main() {
   test('uses the provided value when present', () {
     expect(withDefault('given'), 'given');
   });
+}
+''');
+
+  // invalid_arithmetic.dart: a SECOND, independently verified operator that
+  // can also produce an invalid mutant — `invalid.dart` above only proves
+  // null_coalescing_deletion can. `+` on String is concatenation; swapping it
+  // to `-` (arithmetic_operator_replacement's whole job) has no operator to
+  // fall back to at all. Checked against the real analyzer via a standalone
+  // probe before being written here, not assumed from the operator's own doc
+  // comment.
+  File(p.join(dir.path, 'lib', 'invalid_arithmetic.dart')).writeAsStringSync(
+    "String greet(String name) => 'Hello, ' + name;\n",
+  );
+  File(
+    p.join(dir.path, 'test', 'invalid_arithmetic_test.dart'),
+  ).writeAsStringSync('''
+import 'package:fixture/invalid_arithmetic.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('greets', () => expect(greet('world'), 'Hello, world'));
+}
+''');
+
+  // invalid_statement_deletion.dart: a THIRD operator that can produce an
+  // invalid mutant — deleting the only statement of a value-returning
+  // function's block body leaves nothing to return. A block body, not an
+  // expression body: statement_deletion only proposes mutants inside a
+  // Block, which is also why this needs its own file rather than folding
+  // into one already using an expression body.
+  File(
+    p.join(dir.path, 'lib', 'invalid_statement_deletion.dart'),
+  ).writeAsStringSync('''
+String shout(String s) {
+  return s.toUpperCase();
+}
+''');
+  File(
+    p.join(dir.path, 'test', 'invalid_statement_deletion_test.dart'),
+  ).writeAsStringSync('''
+import 'package:fixture/invalid_statement_deletion.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('shouts', () => expect(shout('hi'), 'HI'));
+}
+''');
+
+  // invalid_mixed.dart: THREE different operators each contribute an
+  // invalid mutant to the SAME file — the shape of the real report that
+  // motivated invalidMutants existing at all, where a bare `invalid: 27`
+  // left a caller unable to tell whether they shared one cause or several.
+  // `label`'s declaration is read by the `return` below it, so: `??`'s
+  // left-alone mutant is a type error (a nullable value where the local's
+  // declared type is not), deleting either statement is a type error (an
+  // undefined read, or a missing return), and `+` on the resulting String
+  // has no `-` to fall back to. `??`'s fallback-alone mutant is the file's
+  // one legitimately scored candidate, and the test below exists to catch
+  // it, not just to pad the fixture.
+  File(p.join(dir.path, 'lib', 'invalid_mixed.dart')).writeAsStringSync('''
+String greet(String? name) {
+  final String label = name ?? 'stranger';
+  return 'Hello, ' + label;
+}
+''');
+  File(
+    p.join(dir.path, 'test', 'invalid_mixed_test.dart'),
+  ).writeAsStringSync('''
+import 'package:fixture/invalid_mixed.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('greets the given name', () => expect(greet('Kai'), 'Hello, Kai'));
 }
 ''');
 
@@ -178,7 +280,11 @@ void main() {
       report = await _runnerFor(dir).run(<String>[
         p.join(dir.path, 'lib', 'detected.dart'),
         p.join(dir.path, 'lib', 'undetected.dart'),
+        p.join(dir.path, 'lib', 'detected_and_undetected.dart'),
         p.join(dir.path, 'lib', 'invalid.dart'),
+        p.join(dir.path, 'lib', 'invalid_arithmetic.dart'),
+        p.join(dir.path, 'lib', 'invalid_statement_deletion.dart'),
+        p.join(dir.path, 'lib', 'invalid_mixed.dart'),
         p.join(dir.path, 'lib', 'no_mutants.dart'),
         p.join(dir.path, 'lib', 'hangs.dart'),
       ]);
@@ -206,6 +312,25 @@ void main() {
         expect(f.detected, 0);
         expect(f.undetected, 1);
         expect(f.invalid, 0);
+      },
+    );
+
+    test(
+      '[boundary] total is detected PLUS undetected, not detected MINUS '
+      'undetected — every other fixture in this suite has one side or the '
+      'other at zero, so only a file with BOTH nonzero can tell `+` apart '
+      'from `-`. Measured: this file is what caught `total`\'s own `+` '
+      'mutating to `-` and coming back unnoticed the first time.',
+      () {
+        final FileMutationReport f = _reportFor(
+          report,
+          'detected_and_undetected.dart',
+        );
+
+        expect(f.detected, 1);
+        expect(f.undetected, 1);
+        expect(f.total, 2, reason: '1 + 1, not 1 - 1');
+        expect(f.detectionRate, 0.5);
       },
     );
 
@@ -279,15 +404,101 @@ void main() {
     );
 
     test(
-      '[boundary] `invalid` deliberately gets no such list — an invalid '
-      'mutant is not legal code, so there is nothing to go and look at',
+      '[boundary] an invalid mutant is reported with its IDENTITY, not just '
+      'counted — a count says the gate rejected something without saying '
+      'what, so nobody can tell a handful of one-off rejections from one '
+      'operator consistently misfiring against this file',
       () {
         final FileMutationReport f = _reportFor(report, 'invalid.dart');
 
-        expect(f.invalid, 1);
-        // The asymmetry is the point: only mutants that were REAL CODE and
-        // went unmeasured earn an identity list.
+        expect(f.invalidMutants, hasLength(f.invalid));
+        final MutantResult r = f.invalidMutants.single;
+        expect(r.verdict, MutantVerdict.invalid);
+        expect(r.mutant.line, greaterThan(0));
+        expect(
+          r.mutant.description,
+          isNotEmpty,
+          reason: 'a caller has to be able to map this back to a source line',
+        );
+        // Still no identity list for the good outcome — nobody needs to know
+        // which mutants a test suite successfully caught, only which ones it
+        // didn't or couldn't.
         expect(f.timedOutMutants, isEmpty);
+      },
+    );
+
+    test(
+      '[partition] arithmetic_operator_replacement on a String produces an '
+      'invalid mutant too, not just null_coalescing_deletion — `+` is '
+      'concatenation, and swapping to `-` has no operator to fall back to '
+      'at all',
+      () {
+        final FileMutationReport f = _reportFor(
+          report,
+          'invalid_arithmetic.dart',
+        );
+
+        expect(f.invalid, 1);
+        expect(f.total, 0, reason: "this file's only candidate is invalid");
+        final MutantResult r = f.invalidMutants.single;
+        expect(r.mutant.operatorName, 'arithmetic_operator_replacement');
+        expect(r.mutant.line, 1);
+      },
+    );
+
+    test(
+      '[partition] statement_deletion produces an invalid mutant when the '
+      'deleted statement was the only `return` in a value-returning '
+      'function',
+      () {
+        final FileMutationReport f = _reportFor(
+          report,
+          'invalid_statement_deletion.dart',
+        );
+
+        expect(f.invalid, 1);
+        expect(f.total, 0, reason: "this file's only candidate is invalid");
+        final MutantResult r = f.invalidMutants.single;
+        expect(r.mutant.operatorName, 'statement_deletion');
+        expect(r.mutant.line, 2);
+        expect(r.mutant.description, contains('return'));
+      },
+    );
+
+    test(
+      '[boundary] invalid mutants from THREE DIFFERENT operators in the '
+      'same file are all captured, each with its own correct identity — '
+      'not merged, dropped, or misattributed to the wrong operator or line',
+      () {
+        final FileMutationReport f = _reportFor(report, 'invalid_mixed.dart');
+
+        expect(f.invalid, 4);
+        expect(f.invalidMutants, hasLength(4));
+        expect(
+          f.invalidMutants
+              .map((MutantResult r) => r.mutant.operatorName)
+              .toSet(),
+          <String>{
+            'null_coalescing_deletion',
+            'statement_deletion',
+            'arithmetic_operator_replacement',
+          },
+          reason: 'three different operators each rejected on this one file',
+        );
+        expect(
+          f.invalidMutants
+              .map((MutantResult r) => (r.mutant.line, r.mutant.column))
+              .toSet(),
+          hasLength(4),
+          reason:
+              'four distinct mutants must map back to four distinct spots, '
+              'not collapse to fewer',
+        );
+        // The file's one legitimately scored mutant survives being buried
+        // among four invalid ones — invalid and detected are counted (and
+        // listed) independently.
+        expect(f.detected, 1);
+        expect(f.undetected, 0);
       },
     );
 
