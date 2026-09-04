@@ -28,6 +28,7 @@ void main() {
         invalid: 10,
         timedOut: 5,
         undetectedMutants: <MutantResult>[],
+        invalidMutants: <MutantResult>[],
         timedOutMutants: <MutantResult>[],
       );
 
@@ -44,6 +45,7 @@ void main() {
         invalid: 4,
         timedOut: 0,
         undetectedMutants: <MutantResult>[],
+        invalidMutants: <MutantResult>[],
         timedOutMutants: <MutantResult>[],
       );
 
@@ -58,6 +60,7 @@ void main() {
         invalid: 0,
         timedOut: 0,
         undetectedMutants: <MutantResult>[],
+        invalidMutants: <MutantResult>[],
         timedOutMutants: <MutantResult>[],
       );
 
@@ -66,12 +69,16 @@ void main() {
   });
 
   test(
-    '[partition] toJson carries total plus every count, and both mutant '
-    'lists rendered as their own JSON, not the raw objects',
+    '[partition] toJson carries total plus every count, and all three '
+    'mutant lists rendered as their own JSON, not the raw objects',
     () {
       final MutantResult undetected = MutantResult(
         mutant: _mutant(7),
         verdict: MutantVerdict.undetected,
+      );
+      final MutantResult invalid = MutantResult(
+        mutant: _mutant(8),
+        verdict: MutantVerdict.invalid,
       );
       final MutantResult timedOut = MutantResult(
         mutant: _mutant(9),
@@ -84,6 +91,7 @@ void main() {
         invalid: 2,
         timedOut: 1,
         undetectedMutants: <MutantResult>[undetected],
+        invalidMutants: <MutantResult>[invalid],
         timedOutMutants: <MutantResult>[timedOut],
       );
 
@@ -95,6 +103,7 @@ void main() {
         'invalid': 2,
         'timedOut': 1,
         'undetectedMutants': <Object?>[undetected.toJson()],
+        'invalidMutants': <Object?>[invalid.toJson()],
         'timedOutMutants': <Object?>[timedOut.toJson()],
       });
     },

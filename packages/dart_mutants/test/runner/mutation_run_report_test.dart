@@ -10,6 +10,7 @@ FileMutationReport _report(String filePath) => FileMutationReport(
   invalid: 0,
   timedOut: 0,
   undetectedMutants: const <MutantResult>[],
+  invalidMutants: const <MutantResult>[],
   timedOutMutants: const <MutantResult>[],
 );
 
