@@ -16,6 +16,9 @@ enum OptionKind {
 
   /// A single whole number, e.g. `maxComplexity: 6`.
   integer,
+
+  /// A single `true`/`false`, e.g. `exemptFlatDispatch: true`.
+  boolean,
 }
 
 /// The registry's entry for one rule: its identity, the bundle it ships in, the

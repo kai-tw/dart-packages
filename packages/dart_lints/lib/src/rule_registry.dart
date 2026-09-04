@@ -104,10 +104,14 @@ class RuleRegistry {
     RuleDescriptor(
       name: 'avoid_high_cyclomatic_complexity',
       bundle: 'core',
-      options: <String, OptionKind>{'maxComplexity': OptionKind.integer},
+      options: <String, OptionKind>{
+        'maxComplexity': OptionKind.integer,
+        'exemptFlatDispatch': OptionKind.boolean,
+      },
       requiredOptions: <String>{'maxComplexity'},
       create: (Map<String, Object?> o) => AvoidHighCyclomaticComplexity(
         maxComplexity: o['maxComplexity'] as int,
+        exemptFlatDispatch: o['exemptFlatDispatch'] as bool? ?? false,
       ),
     ),
     RuleDescriptor(
