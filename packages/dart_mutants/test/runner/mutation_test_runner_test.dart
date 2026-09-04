@@ -57,6 +57,35 @@ void main() {
 void main() {}
 ''');
 
+  // detected_and_undetected.dart: ONE file where detected AND undetected
+  // are BOTH nonzero. Every other fixture in this suite has one side or the
+  // other at zero, which means `total = detected + undetected` computes the
+  // exact same number as `detected - undetected` everywhere else in this
+  // file. Measured: that gap let `total`'s own `+` mutate to `-` and come
+  // back completely unnoticed the first time this file's own operators were
+  // run against it for real, because nothing here could tell addition from
+  // subtraction. `covered`'s ternary is exercised both ways (its mutant is
+  // detected); `uncovered`'s is never called at all (its mutant is not).
+  File(
+    p.join(dir.path, 'lib', 'detected_and_undetected.dart'),
+  ).writeAsStringSync('''
+String covered(bool isPositive) => isPositive ? 'positive' : 'negative';
+String uncovered(bool isPositive) => isPositive ? 'positive' : 'negative';
+''');
+  File(
+    p.join(dir.path, 'test', 'detected_and_undetected_test.dart'),
+  ).writeAsStringSync('''
+import 'package:fixture/detected_and_undetected.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('covered', () {
+    expect(covered(true), 'positive');
+    expect(covered(false), 'negative');
+  });
+}
+''');
+
   // invalid.dart: a `??` whose "left alone" mutant is a guaranteed compile
   // error (String? returned from an explicitly non-nullable String), and
   // whose "fallback alone" mutant compiles fine and is caught by the test.
@@ -251,6 +280,7 @@ void main() {
       report = await _runnerFor(dir).run(<String>[
         p.join(dir.path, 'lib', 'detected.dart'),
         p.join(dir.path, 'lib', 'undetected.dart'),
+        p.join(dir.path, 'lib', 'detected_and_undetected.dart'),
         p.join(dir.path, 'lib', 'invalid.dart'),
         p.join(dir.path, 'lib', 'invalid_arithmetic.dart'),
         p.join(dir.path, 'lib', 'invalid_statement_deletion.dart'),
@@ -282,6 +312,25 @@ void main() {
         expect(f.detected, 0);
         expect(f.undetected, 1);
         expect(f.invalid, 0);
+      },
+    );
+
+    test(
+      '[boundary] total is detected PLUS undetected, not detected MINUS '
+      'undetected — every other fixture in this suite has one side or the '
+      'other at zero, so only a file with BOTH nonzero can tell `+` apart '
+      'from `-`. Measured: this file is what caught `total`\'s own `+` '
+      'mutating to `-` and coming back unnoticed the first time.',
+      () {
+        final FileMutationReport f = _reportFor(
+          report,
+          'detected_and_undetected.dart',
+        );
+
+        expect(f.detected, 1);
+        expect(f.undetected, 1);
+        expect(f.total, 2, reason: '1 + 1, not 1 - 1');
+        expect(f.detectionRate, 0.5);
       },
     );
 
