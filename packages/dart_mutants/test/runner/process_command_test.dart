@@ -11,6 +11,18 @@ import 'package:test/test.dart';
 String _spawnerScript(String pidFile) =>
     'sleep 120 & echo \$! > "$pidFile"; wait';
 
+/// Three levels deep, not two: the outer shell backgrounds an INNER shell
+/// (level 1 — a direct child), which itself backgrounds `sleep` (level 2 —
+/// a grandchild of the process this test starts) and then `wait`s on it, so
+/// the chain stays alive rather than the inner shell exiting immediately and
+/// leaving `sleep` reparented to init before anything gets to check. This is
+/// the shape `_descendantsOf`'s breadth-first walk exists for: finding it
+/// requires continuing the walk past the first level, which
+/// `flutter test` -> `dartaotruntime` -> `flutter_tester` is a real-world
+/// instance of.
+String _threeLevelSpawnerScript(String pidFile) =>
+    'sh -c \'sleep 120 & echo \$! > "$pidFile"; wait\' & wait';
+
 bool _isAlive(int pid) =>
     (Process.runSync('ps', <String>['-o', 'pid=', '-p', '$pid']).stdout
             as String)
@@ -133,6 +145,57 @@ void main() {
             'run that created it and nothing will ever reap it',
       );
     });
+  });
+
+  group('the process tree walk goes past the first level', () {
+    // The BFS in _descendantsOf has to continue past a process's direct
+    // children to find flutter_tools's actual shape (wrapper ->
+    // dartaotruntime -> flutter_tester, three levels). A fixture with only
+    // two levels cannot tell "found direct children" from "found every
+    // descendant" apart — this one has three.
+    late Directory dir;
+    late String pidFile;
+
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('three_level_kill_test_');
+      pidFile = p.join(dir.path, 'greatgrandchild.pid');
+    });
+
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    Future<int> recordedPid() async {
+      final File file = File(pidFile);
+      for (int i = 0; i < 50 && !file.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      return int.parse(file.readAsStringSync().trim());
+    }
+
+    test(
+      '[boundary] a process two levels down is killed too, not just a '
+      'direct child',
+      () async {
+        final ProcessCommand command = ProcessCommand('/bin/sh', <String>[
+          '-c',
+          _threeLevelSpawnerScript(pidFile),
+        ]);
+
+        final int? exitCode = await command.run(
+          timeout: const Duration(seconds: 2),
+        );
+
+        expect(exitCode, isNull, reason: 'the fixture must have timed out');
+        final int deepDescendant = await recordedPid();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        expect(
+          _isAlive(deepDescendant),
+          isFalse,
+          reason:
+              'a survivor two levels down means the walk stopped at the '
+              'first level of children instead of continuing into theirs',
+        );
+      },
+    );
   });
 
   test('[partition] toString renders the executable and its arguments', () {
