@@ -128,6 +128,16 @@ class ProcessCommand {
       sleep(const Duration(milliseconds: 100));
       survivors = _aliveAmong(survivors);
     }
+    // coverage:ignore-start
+    // Fires only when a pid this method itself just SIGKILLed is still
+    // showing alive in `ps` after 2 seconds of polling — SIGKILL cannot be
+    // blocked or ignored by a normal process, so reaching this branch from
+    // inside a hermetic test would mean either defeating SIGKILL outright or
+    // faking `ps` output for a specific pid, neither of which is achievable
+    // without disproportionate new infrastructure. The polling loop above it
+    // (and the false-positive it was built to avoid) is exercised for real
+    // by `test/runner/process_command_test.dart`'s tree-kill group; only
+    // this genuinely-unlucky tail is out of reach.
     if (survivors.isNotEmpty) {
       stderr.writeln(
         'dart_mutants: ${survivors.length} subprocess(es) survived the '
@@ -136,6 +146,7 @@ class ProcessCommand {
         'started after the process tree was snapshotted.',
       );
     }
+    // coverage:ignore-end
   }
 
   /// `SIGKILL`s the tree under every child still running.

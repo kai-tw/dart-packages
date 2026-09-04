@@ -41,6 +41,16 @@ void main() {
       expect(names.toSet(), hasLength(names.length));
     });
 
+    test('[partition] every operator has a non-empty description', () {
+      for (final MutationOperator operator in defaultOperators()) {
+        expect(
+          operator.description,
+          isNotEmpty,
+          reason: '${operator.name} has no description',
+        );
+      }
+    });
+
     test('[partition] a mutant is attributed to the operator that made it', () {
       final ParseStringResult result = parseString(
         content: 'bool f(bool a, bool b) => a && b;',

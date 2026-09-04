@@ -43,13 +43,9 @@ class MutatedFileRegistry {
       return;
     }
     _beforeExit = beforeExit;
-    _sigintSubscription = ProcessSignal.sigint.watch().listen(
-      (ProcessSignal _) => _onSignal(),
-    );
+    _sigintSubscription = ProcessSignal.sigint.watch().listen(_onSignal);
     try {
-      _sigtermSubscription = ProcessSignal.sigterm.watch().listen(
-        (ProcessSignal _) => _onSignal(),
-      );
+      _sigtermSubscription = ProcessSignal.sigterm.watch().listen(_onSignal);
       // coverage:ignore-start
       // `ProcessSignal.sigterm.watch()` only throws on a platform that
       // cannot watch SIGTERM at all (Windows). This CI and every dev
@@ -80,7 +76,12 @@ class MutatedFileRegistry {
   // and is structurally invisible to this process's `--coverage`
   // instrumentation — the same process-boundary shape as
   // `log_system`'s Firebase Crashlytics client factory.
-  void _onSignal() {
+  //
+  // Torn off directly as the `.listen()` callback in [armSignalRestore]
+  // rather than wrapped in `(ProcessSignal _) => _onSignal()` — that wrapper
+  // would itself be a separate, permanently-uncovered line for the same
+  // process-boundary reason, doubling this ignore block for no benefit.
+  void _onSignal(ProcessSignal _) {
     handleSignal();
     exit(1);
   }
