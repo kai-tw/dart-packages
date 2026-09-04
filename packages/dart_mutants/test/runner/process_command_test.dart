@@ -134,4 +134,73 @@ void main() {
       );
     });
   });
+
+  test('[partition] toString renders the executable and its arguments', () {
+    const ProcessCommand command = ProcessCommand('dart', <String>[
+      'test',
+      'foo_test.dart',
+    ]);
+    expect(command.toString(), 'dart test foo_test.dart');
+  });
+
+  test(
+    '[partition] killAllRunning kills every process this class is still '
+    'tracking — the escape hatch a signal handler uses, since it has no '
+    'way to wait for run() to hand it a pid first',
+    () async {
+      const ProcessCommand command = ProcessCommand('sleep', <String>['30']);
+      final Future<int?> future = command.run();
+
+      // Give the child a moment to actually start before asking about it.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      final Stopwatch stopwatch = Stopwatch()..start();
+      ProcessCommand.killAllRunning();
+      await future;
+      stopwatch.stop();
+
+      expect(
+        stopwatch.elapsed,
+        lessThan(const Duration(seconds: 10)),
+        reason:
+            'the 30s sleep must have actually been killed, not awaited '
+            'out',
+      );
+    },
+  );
+
+  test(
+    '[boundary] output larger than a pipe buffer does not deadlock the '
+    'child — stdout and stderr must both be drained continuously, not just '
+    'read once at the end',
+    () async {
+      // 200 KB comfortably exceeds a 64 KB pipe buffer on Linux. An
+      // undrained pipe blocks the child's write() forever once it fills,
+      // which would only ever resolve via run()'s own timeout kill — a
+      // generous timeout paired with an elapsed-time assertion tells the
+      // two outcomes apart.
+      const ProcessCommand command = ProcessCommand('/bin/sh', <String>[
+        '-c',
+        'head -c 200000 /dev/zero; head -c 200000 /dev/zero 1>&2',
+      ]);
+      final Stopwatch stopwatch = Stopwatch()..start();
+      final int? exitCode = await command.run(
+        timeout: const Duration(seconds: 20),
+      );
+      stopwatch.stop();
+
+      expect(
+        exitCode,
+        isNotNull,
+        reason: 'an undrained pipe would hang until the timeout killed it',
+      );
+      expect(
+        stopwatch.elapsed,
+        lessThan(const Duration(seconds: 10)),
+        reason:
+            'finishing near the 20s timeout means it was rescued by the '
+            'kill, not by draining',
+      );
+    },
+  );
 }

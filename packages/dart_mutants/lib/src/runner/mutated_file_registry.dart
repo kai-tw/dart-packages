@@ -50,6 +50,12 @@ class MutatedFileRegistry {
       _sigtermSubscription = ProcessSignal.sigterm.watch().listen(
         (ProcessSignal _) => _onSignal(),
       );
+      // coverage:ignore-start
+      // `ProcessSignal.sigterm.watch()` only throws on a platform that
+      // cannot watch SIGTERM at all (Windows). This CI and every dev
+      // machine this package is exercised on is POSIX, so the call above
+      // never throws here — there is no way to make it throw from inside a
+      // test process short of actually running the suite on Windows.
     } on SignalException catch (e) {
       // Not every platform can watch SIGTERM (Windows cannot). Worth saying
       // out loud, not just silently degrading — SIGINT alone still covers
@@ -60,14 +66,37 @@ class MutatedFileRegistry {
         '— only SIGINT (Ctrl-C) will trigger a restore.',
       );
     }
+    // coverage:ignore-end
   }
 
+  // coverage:ignore-start
+  // Reachable only from a real `SIGINT`/`SIGTERM` delivered to this process
+  // by the OS — not something a test in this same process can trigger
+  // without also ending the test process itself. Proven correct instead by
+  // `test/runner/signal_restore_test.dart`, which starts the real CLI
+  // binary as a subprocess, sends it a real signal, and asserts on the
+  // subprocess's own observable effects (the file restored, the descendant
+  // process reaped). That integration coverage lives in a separate Dart VM
+  // and is structurally invisible to this process's `--coverage`
+  // instrumentation — the same process-boundary shape as
+  // `log_system`'s Firebase Crashlytics client factory.
   void _onSignal() {
-    // Files first: a mutated working tree is the failure that outlives the
-    // process, and it is the cheap one to undo.
+    handleSignal();
+    exit(1);
+  }
+  // coverage:ignore-end
+
+  /// The non-exiting half of the signal handler: restores every tracked
+  /// file, then runs the [armSignalRestore]-time `beforeExit` callback.
+  /// Split out from [_onSignal] so a test can drive it directly — the
+  /// surrounding `exit(1)` cannot run inside a test process without ending
+  /// it.
+  ///
+  /// Files first: a mutated working tree is the failure that outlives the
+  /// process, and it is the cheap one to undo.
+  void handleSignal() {
     restoreAll();
     _beforeExit?.call();
-    exit(1);
   }
 
   /// Records [originalContent] for [filePath] the first time it is mutated,
