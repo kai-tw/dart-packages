@@ -266,4 +266,161 @@ void main() {
       );
     },
   );
+
+  test(
+    '[boundary] the survivor poll obeys its own attempt budget precisely — '
+    'one extra attempt, or never stopping at the budget at all, both show '
+    'up as extra elapsed time',
+    () async {
+      final Directory dir = Directory.systemTemp.createTempSync(
+        'poll_budget_test_',
+      );
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final String pidFile = p.join(dir.path, 'grandchild.pid');
+      final Process process = await Process.start('/bin/sh', <String>[
+        '-c',
+        _spawnerScript(pidFile),
+      ]);
+      unawaited(process.stdout.drain<void>());
+      unawaited(process.stderr.drain<void>());
+      final File file = File(pidFile);
+      for (int i = 0; i < 50 && !file.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+
+      // A budget far smaller than this container's own measured SIGKILL-to-
+      // gone latency (over a second, empirically — real reaping here is
+      // slow enough that this fixture is guaranteed to still be alive after
+      // just one poll), paired with a 500ms interval so a single extra
+      // iteration (one off-by-one on the attempt bound) shows up as an
+      // extra ~500ms rather than getting lost in run-to-run process-spawn
+      // jitter the way a shorter interval would.
+      final Stopwatch stopwatch = Stopwatch()..start();
+      ProcessCommand.killTree(
+        process.pid,
+        maxPollAttempts: 1,
+        pollInterval: const Duration(milliseconds: 500),
+      );
+      stopwatch.stop();
+
+      expect(
+        stopwatch.elapsed,
+        lessThan(const Duration(milliseconds: 800)),
+        reason:
+            'a 1-attempt, 500ms budget must return in roughly 500ms — a '
+            'second ~500ms interval on top means either the loop ran one '
+            'attempt past its budget, or the guard let it keep polling '
+            'instead of stopping at the budget at all',
+      );
+
+      // The real SIGKILL above is already in flight; give it time to
+      // actually finish before the next test starts, rather than leaving
+      // an unreaped process behind.
+      await Future<void>.delayed(const Duration(seconds: 2));
+    },
+  );
+
+  group('what this class is tracking is directly inspectable in tests', () {
+    test(
+      '[partition] a completed run stops being tracked — its pid is gone '
+      'from trackedPidsForTest once run() returns',
+      () async {
+        final Directory dir = Directory.systemTemp.createTempSync(
+          'tracked_pid_test_',
+        );
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final String pidFile = p.join(dir.path, 'self.pid');
+        final ProcessCommand command = ProcessCommand('/bin/sh', <String>[
+          '-c',
+          'echo \$\$ > "$pidFile"',
+        ]);
+
+        final int? exitCode = await command.run();
+
+        expect(exitCode, 0);
+        final int pid = int.parse(File(pidFile).readAsStringSync().trim());
+        expect(
+          ProcessCommand.trackedPidsForTest(),
+          isNot(contains(pid)),
+          reason:
+              'run() must stop tracking its own pid once it returns, or a '
+              'later killAllRunning() would try to kill a process that has '
+              'nothing to do with the run it was actually called for',
+        );
+      },
+    );
+
+    test(
+      '[partition] killAllRunning clears its own tracking set immediately '
+      '— not implicitly, later, whenever the killed process\'s own run() '
+      'call gets around to noticing it exited',
+      () async {
+        const ProcessCommand command = ProcessCommand('sleep', <String>[
+          '30',
+        ]);
+        final Future<int?> future = command.run();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+
+        // killAllRunning is synchronous, so checking right after it
+        // returns — before awaiting future — catches its OWN clear()
+        // specifically. run()'s finally also removes this same pid once
+        // its awaited exitCode resolves, but that needs at least one more
+        // event-loop turn than a plain synchronous call gets, so it cannot
+        // have run yet here.
+        ProcessCommand.killAllRunning();
+
+        expect(
+          ProcessCommand.trackedPidsForTest(),
+          isEmpty,
+          reason:
+              'a set killAllRunning forgot to clear would make a LATER '
+              'call try to kill a pid that finished or was already killed, '
+              'rather than starting from nothing',
+        );
+
+        await future;
+      },
+    );
+  });
+
+  test(
+    '[boundary] the killed root process is actually reaped, not left a '
+    'zombie for nothing to wait on',
+    () async {
+      final Directory dir = Directory.systemTemp.createTempSync('reap_test_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final String pidFile = p.join(dir.path, 'root.pid');
+      // `exec` replaces the shell's own process image but keeps its pid, so
+      // the pid this records is exactly the one run() starts, kills, and is
+      // responsible for reaping — there is no separate descendant here.
+      final ProcessCommand command = ProcessCommand('/bin/sh', <String>[
+        '-c',
+        'echo \$\$ > "$pidFile"; exec sleep 30',
+      ]);
+
+      final int? exitCode = await command.run(
+        timeout: const Duration(seconds: 1),
+      );
+
+      expect(exitCode, isNull, reason: 'the fixture must have timed out');
+      final int rootPid = int.parse(File(pidFile).readAsStringSync().trim());
+      final String stat =
+          (Process.runSync('ps', <String>[
+                    '-o',
+                    'stat=',
+                    '-p',
+                    '$rootPid',
+                  ]).stdout
+                  as String)
+              .trim();
+      expect(
+        stat,
+        isNot(startsWith('Z')),
+        reason:
+            'a zombie means nothing ever called waitpid() on the killed '
+            'process — this class started it directly, so reaping it was '
+            'always this class\'s own job, not the OS init\'s',
+      );
+    },
+  );
 }

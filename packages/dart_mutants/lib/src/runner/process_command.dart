@@ -28,6 +28,11 @@ class ProcessCommand {
   /// "at most one" is a property of the current runner, not of this class.
   static final Set<int> _running = <int>{};
 
+  /// A snapshot of [_running], for tests only — production code has no
+  /// legitimate reason to read what this class is tracking; [killAllRunning]
+  /// is the only thing outside this class that ever needs to act on it.
+  static Set<int> trackedPidsForTest() => Set<int>.of(_running);
+
   /// Runs the command to completion and returns its exit code, or `null` if
   /// it did not finish within [timeout].
   ///
@@ -107,7 +112,17 @@ class ProcessCommand {
   /// platform without it this degrades to killing the direct child, exactly
   /// as before; that is said out loud rather than failing quietly, since the
   /// leak it reintroduces is invisible.
-  static void killTree(int rootPid) {
+  ///
+  /// [maxPollAttempts] and [pollInterval] tune the survivor poll below and
+  /// exist for tests — production callers get the real 20-attempts/100ms
+  /// budget the class doc above measures against; a test can shrink both to
+  /// force the poll to exhaust its budget against a real, deliberately-slow-
+  /// to-reap process without waiting out the real one.
+  static void killTree(
+    int rootPid, {
+    int maxPollAttempts = 20,
+    Duration pollInterval = const Duration(milliseconds: 100),
+  }) {
     final List<int> descendants = _descendantsOf(rootPid);
     Process.killPid(rootPid, ProcessSignal.sigkill);
     for (final int pid in descendants) {
@@ -124,8 +139,12 @@ class ProcessCommand {
     // gone, on the very first real run. A check that cries wolf on every
     // timeout is a check nobody reads, which is worse than not having one.
     List<int> survivors = descendants;
-    for (int attempt = 0; attempt < 20 && survivors.isNotEmpty; attempt++) {
-      sleep(const Duration(milliseconds: 100));
+    for (
+      int attempt = 0;
+      attempt < maxPollAttempts && survivors.isNotEmpty;
+      attempt++
+    ) {
+      sleep(pollInterval);
       survivors = _aliveAmong(survivors);
     }
     // coverage:ignore-start
