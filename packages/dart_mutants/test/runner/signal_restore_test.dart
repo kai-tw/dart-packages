@@ -144,8 +144,15 @@ void main() {
       final bool killed = process.kill(ProcessSignal.sigterm);
       expect(killed, isTrue, reason: 'the process must still be alive to kill');
 
-      await process.exitCode.timeout(const Duration(seconds: 10));
+      final int exitCode = await process.exitCode.timeout(
+        const Duration(seconds: 10),
+      );
 
+      // The handler must reach its own exit(1), not fall through to
+      // whatever code the process would otherwise end with — a deleted
+      // exit(1) is invisible to every other assertion here since the file
+      // restore and subprocess reap happen before it either way.
+      expect(exitCode, 1);
       expect(target.readAsStringSync(), original);
     },
     timeout: const Timeout(Duration(seconds: 60)),
@@ -190,7 +197,10 @@ void main() {
       );
 
       process.kill(ProcessSignal.sigterm);
-      await process.exitCode.timeout(const Duration(seconds: 10));
+      final int exitCode = await process.exitCode.timeout(
+        const Duration(seconds: 10),
+      );
+      expect(exitCode, 1);
 
       List<int> survivors = inFlight;
       for (int attempt = 0; attempt < 30 && survivors.isNotEmpty; attempt++) {
