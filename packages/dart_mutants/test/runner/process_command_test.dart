@@ -341,15 +341,17 @@ void main() {
       }
       final int grandchild = int.parse(file.readAsStringSync().trim());
 
-      // Same trick as the budget test above: a budget far shorter than this
-      // container's own measured SIGKILL-to-gone latency guarantees the
-      // grandchild is still alive when the poll gives up, so the survivor
-      // report is reached deterministically rather than by luck.
+      // maxPollAttempts: 0 skips the aliveness re-check entirely — the real
+      // SIGKILLs above still go out, but `survivors` is never refreshed
+      // from the raw (non-empty) descendants list, so the report fires
+      // deterministically regardless of how fast THIS machine actually
+      // reaps a killed process (measured over a second in this sandbox,
+      // apparently much faster on other runners — a fixed small poll
+      // budget flaked on the difference).
       final List<String> reports = <String>[];
       ProcessCommand.killTree(
         process.pid,
-        maxPollAttempts: 1,
-        pollInterval: const Duration(milliseconds: 500),
+        maxPollAttempts: 0,
         reportSurvivors: reports.add,
       );
 
