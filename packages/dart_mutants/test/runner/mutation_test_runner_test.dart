@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:dart_mutants/src/mutation_operator.dart';
+import 'package:dart_mutants/src/operators/ternary_swap.dart';
 import 'package:dart_mutants/src/runner/compile_safety_gate.dart';
 import 'package:dart_mutants/src/runner/file_mutation_report.dart';
 import 'package:dart_mutants/src/runner/mutant_result.dart';
@@ -226,6 +228,18 @@ void main() {
   test('takes the safe path', () => expect(process(true), 'ok'));
 }
 ''');
+
+  // custom_operators.dart: a ternary AND a relational comparison in the same
+  // expression, never exercised by its test at all — so defaultOperators()
+  // would report undetected mutants from BOTH TernarySwap and
+  // RelationalOperatorReplacement, while a caller-supplied list holding only
+  // TernarySwap must report just the one.
+  File(p.join(dir.path, 'lib', 'custom_operators.dart')).writeAsStringSync(
+    "String classify(int a, int b) => a < b ? 'less' : 'not-less';\n",
+  );
+  File(
+    p.join(dir.path, 'test', 'custom_operators_test.dart'),
+  ).writeAsStringSync('void main() {}\n');
 
   final ProcessResult pubGet = await Process.run('dart', <String>[
     'pub',
@@ -555,6 +569,138 @@ void main() {
           detectedBefore,
         );
       },
+    );
+  });
+
+  group('a caller-supplied operators list', () {
+    test(
+      '[boundary] only the given operators run — not silently falling back '
+      'to the full defaultOperators() set',
+      () async {
+        final Directory dir = await _fixturePackage();
+        addTearDown(() => dir.deleteSync(recursive: true));
+
+        final MutationTestRunner runner = MutationTestRunner(
+          testCommand: ProcessCommand('dart', <String>[
+            'test',
+          ], workingDirectory: dir.path),
+          compileSafetyGate: const CompileSafetyGate(
+            ProcessCommand('dart', <String>['analyze']),
+          ),
+          operators: <MutationOperator>[TernarySwap()],
+          mutantTimeout: const Duration(seconds: 10),
+        );
+
+        final MutationRunReport report = await runner.run(<String>[
+          p.join(dir.path, 'lib', 'custom_operators.dart'),
+        ]);
+
+        final FileMutationReport f = report.files.single;
+        // defaultOperators() would also propose the two relational `<`
+        // mutants on this file. Their absence — one mutant total, and it is
+        // the ternary swap — is what proves the caller's list was actually
+        // used rather than defaultOperators() silently winning.
+        expect(f.undetected, 1);
+        expect(f.undetectedMutants.single.mutant.operatorName, 'ternary_swap');
+      },
+    );
+  });
+
+  group('the test compilation cache', () {
+    test(
+      '[partition] is cleared before the baseline runs — a stale marker '
+      'left over from a previous session must not survive into this run',
+      () async {
+        final Directory dir = await _fixturePackage();
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final Directory cacheDir = Directory(
+          p.join(dir.path, '.dart_tool', 'test'),
+        );
+        cacheDir.createSync(recursive: true);
+        final File marker = File(p.join(cacheDir.path, 'stale_marker.txt'));
+        marker.writeAsStringSync('leftover from a previous run');
+
+        await _runnerFor(dir).run(<String>[
+          p.join(dir.path, 'lib', 'no_mutants.dart'),
+        ]);
+
+        expect(
+          marker.existsSync(),
+          isFalse,
+          reason:
+              'dart test never writes a file with this name — its survival '
+              'past the run means the cache was never cleared before the '
+              'baseline compiled',
+        );
+      },
+    );
+  });
+
+  group('a baseline that never finishes', () {
+    test(
+      '[boundary] aborts with its own reason, distinct from a baseline '
+      'that finishes but fails',
+      () async {
+        final Directory dir = Directory.systemTemp.createTempSync(
+          'mutation_test_runner_hang_test_',
+        );
+        addTearDown(() => dir.deleteSync(recursive: true));
+        File(p.join(dir.path, 'pubspec.yaml')).writeAsStringSync('''
+name: hang_fixture
+environment:
+  sdk: ^3.8.0
+dev_dependencies:
+  test: ^1.25.0
+''');
+        Directory(p.join(dir.path, 'lib')).createSync();
+        Directory(p.join(dir.path, 'test')).createSync();
+        File(p.join(dir.path, 'lib', 'target.dart')).writeAsStringSync(
+          "String classify(bool isPositive) => isPositive ? 'positive' : "
+          "'negative';\n",
+        );
+        // Hangs unconditionally, on the very first (unmutated) run — unlike
+        // hangs.dart above, which only hangs once mutated. That is the
+        // distinction this test exists for: an ALREADY-hanging baseline,
+        // not a mutant that induces one.
+        File(p.join(dir.path, 'test', 'target_test.dart')).writeAsStringSync('''
+import 'package:test/test.dart';
+
+void main() {
+  test('hangs forever', () {
+    // ignore: literal_only_boolean_expressions
+    while (true) {}
+  });
+}
+''');
+        final ProcessResult pubGet = await Process.run('dart', <String>[
+          'pub',
+          'get',
+        ], workingDirectory: dir.path);
+        if (pubGet.exitCode != 0) {
+          throw StateError(
+            'dart pub get failed:\n${pubGet.stdout}\n${pubGet.stderr}',
+          );
+        }
+
+        final MutationTestRunner runner = MutationTestRunner(
+          testCommand: ProcessCommand('dart', <String>[
+            'test',
+          ], workingDirectory: dir.path),
+          compileSafetyGate: const CompileSafetyGate(
+            ProcessCommand('dart', <String>['analyze']),
+          ),
+          mutantTimeout: const Duration(seconds: 5),
+        );
+
+        final MutationRunReport report = await runner.run(<String>[
+          p.join(dir.path, 'lib', 'target.dart'),
+        ]);
+
+        expect(report.aborted, isTrue);
+        expect(report.abortReason, contains('did not finish'));
+        expect(report.files, isEmpty);
+      },
+      timeout: const Timeout(Duration(seconds: 30)),
     );
   });
 }

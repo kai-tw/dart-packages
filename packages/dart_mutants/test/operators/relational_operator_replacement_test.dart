@@ -62,4 +62,15 @@ void main() {
     ).firstWhere((Mutant m) => m.replacement == '<');
     expect(mutant.applyTo(source), 'bool f(int a, int b) => a < b;');
   });
+
+  test(
+    '[boundary] a comparison nested as an operand of another comparison is '
+    'visited too, not just the outermost one — the visitor must keep '
+    'walking into its operands',
+    () {
+      const String source =
+          'bool f(int a, int b, int c) => (a < b) == (b < c);';
+      expect(_mutate(source), hasLength(5));
+    },
+  );
 }

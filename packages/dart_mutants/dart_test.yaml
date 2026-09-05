@@ -1,0 +1,17 @@
+# Most of this suite's tests spin up a real temp Dart package and run real
+# `dart pub get` / `dart analyze` / `dart test` subprocesses against it — the
+# doc comment on `mutation_test_runner_test.dart`'s fixture explains why: a
+# mock of any one of those would test the mock, not this package's own
+# classification logic. `TestCompilationCache` made every one of those
+# subprocess test runs a cold compile instead of an incremental one
+# (`test_compilation_cache.dart`'s own doc has the false-negative bug that
+# forced that trade), which raised both how long any one of them takes and
+# how badly they compete with each other for CPU when several run at once.
+#
+# concurrency: 1 turned out to matter more than the timeout bump — with the
+# default concurrency, several of these subprocess-heavy fixtures running in
+# parallel pushed even their own generous per-mutant timeouts past the
+# outer per-test one. Serial execution costs this suite wall-clock time; a
+# suite that exists to validate a scoring engine cannot be the flaky one.
+concurrency: 1
+timeout: 4x

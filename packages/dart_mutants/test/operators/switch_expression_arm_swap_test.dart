@@ -100,4 +100,22 @@ String f(int x) => switch (x) {
     expect(mutated, contains('int n when n > 0 =>'));
     expect(mutated, contains('int n =>'));
   });
+
+  test(
+    '[boundary] a switch expression nested as an arm\'s own value is '
+    'visited too, not just the outermost one — the visitor must keep '
+    'walking into arm bodies',
+    () {
+      const String source = '''
+String f(int x, int y) => switch (x) {
+  1 => switch (y) {
+    1 => 'a',
+    2 => 'b',
+  },
+  2 => 'c',
+};
+''';
+      expect(_mutate(source), hasLength(4));
+    },
+  );
 }

@@ -92,4 +92,43 @@ void main() {
       expect(registry.isArmed, isFalse);
     },
   );
+
+  test(
+    '[boundary] a second armSignalRestore call is a true no-op — the '
+    'already-armed guard, not just an accident of overwriting, is what '
+    'blocks the second beforeExit from taking effect',
+    () async {
+      final MutatedFileRegistry registry = MutatedFileRegistry();
+      bool firstCalled = false;
+      bool secondCalled = false;
+
+      registry.armSignalRestore(beforeExit: () => firstCalled = true);
+      registry.armSignalRestore(beforeExit: () => secondCalled = true);
+      registry.handleSignal();
+
+      expect(firstCalled, isTrue);
+      expect(secondCalled, isFalse);
+
+      await registry.disarm();
+    },
+  );
+
+  test(
+    '[partition] handleSignal restores every tracked file before running '
+    'beforeExit — the same effect _onSignal has, minus the process exit',
+    () async {
+      final MutatedFileRegistry registry = MutatedFileRegistry();
+      registry.track(file.path, 'original content');
+      file.writeAsStringSync('mutated content');
+      bool beforeExitCalled = false;
+
+      registry.armSignalRestore(beforeExit: () => beforeExitCalled = true);
+      registry.handleSignal();
+
+      expect(file.readAsStringSync(), 'original content');
+      expect(beforeExitCalled, isTrue);
+
+      await registry.disarm();
+    },
+  );
 }

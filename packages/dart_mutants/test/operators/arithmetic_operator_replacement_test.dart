@@ -76,4 +76,13 @@ void main() {
       );
     },
   );
+
+  test(
+    '[boundary] a nested binary expression is visited too, not just the '
+    'outermost one — the visitor must keep walking into its operands',
+    () {
+      const String source = 'int f(int a, int b, int c) => a + (b - c);';
+      expect(_mutate(source), hasLength(2));
+    },
+  );
 }

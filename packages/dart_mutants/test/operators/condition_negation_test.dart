@@ -97,4 +97,27 @@ void main() {
     // TernarySwap already mutates the ?: by swapping its branches.
     expect(_mutate('int f() => flag ? 1 : 0;'), isEmpty);
   });
+
+  group('nested constructs are visited too, not just the outermost one', () {
+    test('[boundary] an if-statement nested inside another if-statement', () {
+      const String source = 'void f() { if (a) { if (b) { g(); } } }';
+      expect(_mutate(source), hasLength(2));
+    });
+
+    test('[boundary] an if-element nested inside another if-element', () {
+      const String source = 'List<int> f() => [if (a) if (b) 2];';
+      expect(_mutate(source), hasLength(2));
+    });
+
+    test('[boundary] a while loop nested inside another while loop', () {
+      const String source = 'void f() { while (a) { while (b) { g(); } } }';
+      expect(_mutate(source), hasLength(2));
+    });
+
+    test('[boundary] a do-while loop nested inside another do-while loop', () {
+      const String source =
+          'void f() { do { do { g(); } while (b); } while (a); }';
+      expect(_mutate(source), hasLength(2));
+    });
+  });
 }

@@ -1,3 +1,64 @@
+## 0.2.6
+
+**Fixes a false negative**: a mutant that a project's real test suite
+genuinely kills could be scored `undetected` anyway, silently, with no
+indication anything was wrong.
+
+Found against `clock_anchor`: a full 24-file run reported
+`NtpPacket.kissCode`'s `if (byte < 0x41 || byte > 0x5A)` swapped to `&&` —
+guarding against a hostile NTP reply injecting control characters into a log
+line — as undetected. Applying that exact mutation by hand and running the
+real suite directly failed two tests. Re-running this package against just
+that one file in isolation scored it correctly.
+
+Root cause: `dart test` (via `package:test`) keeps a persistent kernel under
+`<package>/.dart_tool/test/incremental_kernel.*` to skip recompiling between
+runs. This package's own inner loop — mutate one file to a small variant,
+test, revert, mutate it again, over and over, very fast — is exactly the
+pattern that cache's invalidation was never built against.
+
+`TestCompilationCache` now deletes `.dart_tool/test/` before the baseline run
+and before every mutant's test run. Unconditional, not narrowed to a specific
+filename: a directory that is not there is a no-op, and `flutter test` does
+not appear to populate this path at all, so this costs nothing for a Flutter
+consumer. Every mutant becomes a cold compile instead of an incremental one —
+accepted deliberately. This package's only product is the score, and a fast
+wrong number is worse than a slow right one.
+
+That cost showed up immediately in this package's own test suite —
+subprocess-heavy fixture tests started missing their timeouts, mostly from
+resource contention when several ran in parallel. `dart_test.yaml` now sets
+`concurrency: 1` (confirmed, not guessed, to fix most of it: `-j 1` alone
+resolved 10 of 12 failures) and `timeout: 4x` for the two that still needed
+real headroom in isolation.
+
+Re-ran the exact 24-file `clock_anchor` batch that exposed the bug as the
+definitive check: `ntp_packet.dart` now scores `41/41` (was `40/41`), and
+every other file's numbers are unchanged.
+
+**No change to the CLI or JSON report shape** beyond what 0.2.5 already made,
+and **no change to the engine version `plan-mutation` requires** — its floor
+stays at 0.2.3. A caller who was already correct sees only a slower,
+now-trustworthy run.
+
+This package's own coverage and mutation score had never been measured
+against itself before this release: 85.5% line coverage, 73.1% mutation,
+below the bar every other package in this workspace is now held to. Brought
+up to match — dedicated tests for the small report/data classes
+(`MutantResult`, `MutationRunReport`, `FileMutationReport`,
+`isGeneratedFile`), nested-construct recursion tests for the AST-walking
+operators, `MutatedFileRegistry`'s `handleSignal()` extracted as a directly
+testable seam, and new tests for `ProcessCommand.killAllRunning()`/
+`toString()`/pipe-buffer draining and for `MutationTestRunner`'s
+caller-supplied operator list, cache-clearing, and hung-baseline paths —
+several confirmed empirically by reintroducing the target mutant and
+watching the new test fail. What remains uncovered is a small, individually
+justified set of process-boundary and platform-gated lines (a real
+`SIGINT`/`SIGTERM` handler body, a Windows-only exception branch, a missing-
+`ps` fallback) that cannot be reached from inside this process's own test
+suite without either ending it or running on a platform this package is not
+developed on; each carries a `coverage:ignore` naming exactly why.
+
 ## 0.2.5
 
 `invalidMutants` — an invalid mutant is now reported with its identity, not

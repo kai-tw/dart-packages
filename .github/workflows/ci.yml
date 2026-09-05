@@ -47,7 +47,10 @@ jobs:
       # here, so its suite silently never ran in CI. That suite drives real
       # subprocesses (dart pub get, dart analyze, dart test, SIGTERM/SIGKILL)
       # rather than mocking any of them, so it is the slowest package step in
-      # this job.
+      # this job — and its own dart_test.yaml pins concurrency: 1 and a 4x
+      # timeout on top of that, because each of those subprocess runs is now
+      # a cold compile by design (see TestCompilationCache). That is the
+      # accepted trade, not a flake to chase.
       - run: dart test
         working-directory: packages/dart_mutants
 

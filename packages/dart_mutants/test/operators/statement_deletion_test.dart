@@ -83,6 +83,33 @@ void f() {
     },
   );
 
+  group('the summary\'s 60-char truncation boundary', () {
+    test(
+      '[boundary] a statement flattening to exactly 60 chars is not '
+      'truncated — the cutoff is inclusive',
+      () {
+        final String call = '${'a'.padRight(57, 'b')}();';
+        expect(call.length, 60);
+        final List<Mutant> mutants = _mutate('void f() { $call }');
+        expect(mutants.single.description, "deleted '$call'");
+      },
+    );
+
+    test(
+      '[boundary] a statement flattening to 61 chars is truncated to 57 '
+      'chars plus an ellipsis',
+      () {
+        final String call = '${'a'.padRight(58, 'b')}();';
+        expect(call.length, 61);
+        final List<Mutant> mutants = _mutate('void f() { $call }');
+        expect(
+          mutants.single.description,
+          "deleted '${call.substring(0, 57)}...'",
+        );
+      },
+    );
+  });
+
   test('[partition] a closure body is its own block', () {
     const String source = 'void f() { xs.forEach((int x) { g(x); }); }';
     final List<Mutant> mutants = _mutate(source);
