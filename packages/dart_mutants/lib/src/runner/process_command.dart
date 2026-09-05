@@ -118,10 +118,15 @@ class ProcessCommand {
   /// budget the class doc above measures against; a test can shrink both to
   /// force the poll to exhaust its budget against a real, deliberately-slow-
   /// to-reap process without waiting out the real one.
+  ///
+  /// [reportSurvivors] receives the same message [stderr] gets by default —
+  /// overridable so a test can capture it instead of asserting on process
+  /// output, which nothing in this package can otherwise intercept.
   static void killTree(
     int rootPid, {
     int maxPollAttempts = 20,
     Duration pollInterval = const Duration(milliseconds: 100),
+    void Function(String)? reportSurvivors,
   }) {
     final List<int> descendants = _descendantsOf(rootPid);
     Process.killPid(rootPid, ProcessSignal.sigkill);
@@ -147,25 +152,14 @@ class ProcessCommand {
       sleep(pollInterval);
       survivors = _aliveAmong(survivors);
     }
-    // coverage:ignore-start
-    // Fires only when a pid this method itself just SIGKILLed is still
-    // showing alive in `ps` after 2 seconds of polling — SIGKILL cannot be
-    // blocked or ignored by a normal process, so reaching this branch from
-    // inside a hermetic test would mean either defeating SIGKILL outright or
-    // faking `ps` output for a specific pid, neither of which is achievable
-    // without disproportionate new infrastructure. The polling loop above it
-    // (and the false-positive it was built to avoid) is exercised for real
-    // by `test/runner/process_command_test.dart`'s tree-kill group; only
-    // this genuinely-unlucky tail is out of reach.
     if (survivors.isNotEmpty) {
-      stderr.writeln(
+      (reportSurvivors ?? stderr.writeln)(
         'dart_mutants: ${survivors.length} subprocess(es) survived the '
         'timeout kill and are now orphaned — ${survivors.join(', ')}. They '
         'will keep running until killed by hand. This means a descendant '
         'started after the process tree was snapshotted.',
       );
     }
-    // coverage:ignore-end
   }
 
   /// `SIGKILL`s the tree under every child still running.

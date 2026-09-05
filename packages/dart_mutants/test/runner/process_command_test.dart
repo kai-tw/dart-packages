@@ -320,6 +320,50 @@ void main() {
     },
   );
 
+  test(
+    '[boundary] a survivor still alive when the poll budget runs out is '
+    'reported, not silently left running',
+    () async {
+      final Directory dir = Directory.systemTemp.createTempSync(
+        'survivor_report_test_',
+      );
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final String pidFile = p.join(dir.path, 'grandchild.pid');
+      final Process process = await Process.start('/bin/sh', <String>[
+        '-c',
+        _spawnerScript(pidFile),
+      ]);
+      unawaited(process.stdout.drain<void>());
+      unawaited(process.stderr.drain<void>());
+      final File file = File(pidFile);
+      for (int i = 0; i < 50 && !file.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      final int grandchild = int.parse(file.readAsStringSync().trim());
+
+      // Same trick as the budget test above: a budget far shorter than this
+      // container's own measured SIGKILL-to-gone latency guarantees the
+      // grandchild is still alive when the poll gives up, so the survivor
+      // report is reached deterministically rather than by luck.
+      final List<String> reports = <String>[];
+      ProcessCommand.killTree(
+        process.pid,
+        maxPollAttempts: 1,
+        pollInterval: const Duration(milliseconds: 500),
+        reportSurvivors: reports.add,
+      );
+
+      expect(reports, hasLength(1));
+      expect(reports.single, contains('1 subprocess(es) survived'));
+      expect(reports.single, contains('$grandchild'));
+
+      // The real SIGKILL above is already in flight; give it time to
+      // actually finish before the next test starts, rather than leaving
+      // an unreaped process behind.
+      await Future<void>.delayed(const Duration(seconds: 2));
+    },
+  );
+
   group('what this class is tracking is directly inspectable in tests', () {
     test(
       '[partition] a completed run stops being tracked — its pid is gone '
